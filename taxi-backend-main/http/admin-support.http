@@ -1,0 +1,42 @@
+@baseUrl = http://localhost:3000
+@adminEmail = suadmintaxi@gmail.com
+@adminPassword = Admin@123
+@ticketId = 69d8b48e9d43b71bb434bc6b
+
+### 1) Admin Login
+# @name adminLogin
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "{{adminPassword}}"
+}
+
+### 2) Get All Tickets
+GET {{baseUrl}}/api/admin/tickets
+Authorization: Bearer {{adminLogin.response.body.$.data.accessToken}}
+
+### 3) Get Ticket By Id
+GET {{baseUrl}}/api/admin/tickets/{{ticketId}}
+Authorization: Bearer {{adminLogin.response.body.$.data.accessToken}}
+
+### 4) Reply To Ticket
+POST {{baseUrl}}/api/admin/tickets/{{ticketId}}/reply
+Content-Type: application/json
+Authorization: Bearer {{adminLogin.response.body.$.data.accessToken}}
+
+{
+  "message": "We are checking this and will update you soon."
+}
+
+### 5) Update Ticket Status (IN_PROGRESS | RESOLVED | CLOSED | OPEN)
+PATCH {{baseUrl}}/api/admin/tickets/{{ticketId}}/status
+Content-Type: application/json
+Authorization: Bearer {{adminLogin.response.body.$.data.accessToken}}
+
+{
+  "status": "RESOLVED"
+}
+
+

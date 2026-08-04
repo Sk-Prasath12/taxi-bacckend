@@ -1,0 +1,93 @@
+@baseUrl = http://localhost:3000
+@customerEmail = customer01@yopmail.com
+@customerPassword = ashwin123
+@driverEmail = skprasath201116@yopmail.com
+@driverPassword = driver123456
+@vehicleTypeId = REPLACE_WITH_VEHICLE_TYPE_ID
+
+### 0) Health Check
+GET {{baseUrl}}/api/v1/health
+
+### 1) Customer Login
+# @name customerLogin
+POST {{baseUrl}}/api/customers/login
+Content-Type: application/json
+
+{
+  "email": "{{customerEmail}}",
+  "password": "{{customerPassword}}"
+}
+
+### 2) Driver Login
+# @name driverLogin
+POST {{baseUrl}}/api/drivers/login
+Content-Type: application/json
+
+{
+  "email": "{{driverEmail}}",
+  "password": "{{driverPassword}}"
+}
+
+### 3) Customer Request Ride
+# @name requestRide
+POST {{baseUrl}}/api/customers/rides/request
+Content-Type: application/json
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+{
+  "pickup_lat": 12.9754605,
+  "pickup_lng": 80.2207047,
+  "pickup_address": "Guindy, Chennai",
+  "drop_lat": 13.0066625,
+  "drop_lng": 80.2206369,
+  "drop_address": "T Nagar, Chennai",
+  "vehicle_type_id": "{{vehicleTypeId}}",
+  "payment_mode": "CASH"
+}
+
+### 4) Customer Confirm Ride
+POST {{baseUrl}}/api/customers/rides/confirm
+Content-Type: application/json
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+{
+  "ride_id": "{{requestRide.response.body.$.ride_id}}"
+}
+
+### 5) Driver Incoming Rides
+GET {{baseUrl}}/api/drivers/rides/incoming
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### 6) Driver Accept Ride
+POST {{baseUrl}}/api/drivers/rides/{{requestRide.response.body.$.ride_id}}/accept
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### 7) Driver Arrived
+POST {{baseUrl}}/api/drivers/rides/{{requestRide.response.body.$.ride_id}}/arrived
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### 8) Driver Verify OTP (starts ride)
+POST {{baseUrl}}/api/drivers/rides/{{requestRide.response.body.$.ride_id}}/verify-otp
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "otp": 1234
+}
+
+### 9) Driver Picked Up
+POST {{baseUrl}}/api/drivers/rides/{{requestRide.response.body.$.ride_id}}/picked-up
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### 10) Driver In Transit
+POST {{baseUrl}}/api/drivers/rides/{{requestRide.response.body.$.ride_id}}/in-transit
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### 11) Driver Dropped (complete)
+POST {{baseUrl}}/api/drivers/rides/{{requestRide.response.body.$.ride_id}}/dropped
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### 12) Customer Ride Status
+GET {{baseUrl}}/api/customers/rides/{{requestRide.response.body.$.ride_id}}/status
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+

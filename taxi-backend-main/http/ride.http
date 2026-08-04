@@ -1,0 +1,200 @@
+@baseUrl = http://localhost:3000
+@customerName = prasath
+@customerPhone = 9876543210
+@customerEmail = sk201116@yopmail.com
+@customerPassword = Sk@123456
+@customerId = {{customerLogin.response.body.$.user.id}}
+@rideId = {{requestRide.response.body.$.ride_id}}
+# Must be a 24-char hex Mongo id. Auto-filled from "Get All Vehicle Types" below (run that request first).
+# If you still get 400 "Invalid vehicle type id": run GET /api/vehicle-types in this file and paste one `id` here, or seed DB: npm run seed
+@vehicleTypeId = {{vehicleTypesList.response.body.$[0].id}}
+@vehicleTypeId = 69b8f3b0d21fa0448070ed83
+@testPaymentId = pay_REPLACE_ME
+@testSignature = sig_REPLACE_ME
+
+### Health
+GET {{baseUrl}}/api/v1/health
+
+### OPTIONAL (new customer only): Customer Register
+# Skip this if customer already exists (409 is expected in that case).
+POST {{baseUrl}}/api/customers/register/email
+Content-Type: application/json
+
+{
+  "name": "{{customerName}}",
+  "phone": "{{customerPhone}}",
+  "email": "{{customerEmail}}"
+}
+### OPTIONAL (new customer only): Customer Register Verify OTP
+# Use test OTP 123456
+POST {{baseUrl}}/api/customers/register/verify-otp
+Content-Type: application/json
+
+{
+  "email": "{{customerEmail}}",
+  "otp": "436108"
+}
+
+### OPTIONAL (new customer only): Customer Register Set Password
+POST {{baseUrl}}/api/customers/register/set-password
+Content-Type: application/json
+
+{
+  "email": "{{customerEmail}}",
+  "password": "{{customerPassword}}"
+}
+
+### 1) Customer Login (required before ride APIs)
+# NOTE: If this returns 403 "Customer access only", this email belongs to a DRIVER/ADMIN account.
+# @name customerLogin
+POST {{baseUrl}}/api/customers/login
+Content-Type: application/json
+
+{
+  "email": "{{customerEmail}}",
+  "password": "{{customerPassword}}"
+}
+
+### Get All Vehicle Types (run before "Request Ride" — needed for @vehicleTypeId)
+# @name vehicleTypesList
+GET {{baseUrl}}/api/vehicle-types
+
+### Get Active Vehicle Types Only
+GET {{baseUrl}}/api/vehicle-types/active
+
+@vehicleTypeId = 69fe6458d925bfe08b2b91b2
+### Customer Profile (shows MongoDB customer id)
+# @name customerProfile
+GET {{baseUrl}}/api/customers/profile
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+@vehicleTypeId = 69fe6458d925bfe08b2b91b2
+
+###pickup location
+GET {{baseUrl}}/api/customers/rides/pickup-locations
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+###drop location
+GET {{baseUrl}}/api/customers/rides/drop-locations
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+### 2) Request Ride
+# Prereqs: 1) Customer Login 2) Get All Vehicle Types (non-empty array; if empty run `npm run seed` from project root)
+# Optional body: "payment_mode": "ONLINE" | "CASH" (default CASH)
+# Optional body: "pickup_address", "drop_address" (defaults to empty string if omitted)
+# Fare is always calculated by backend (client cannot set fare)
+# Responses (confirm / active / status / history) include payment_mode, payment_status, fare, otp, etc.
+# @name requestRide
+POST {{baseUrl}}/api/customers/rides/request
+Content-Type: application/json
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+{
+  "pickup_lat": 12.97598,
+  "pickup_lng": 80.22120,
+  "pickup_address": "Phoenix Mall, Velachery Main Rd, Chennai",
+  "drop_lat": 12.9268,
+  "drop_lng":  80.1203,
+  "drop_address": "VIT Chennai, Kelambakkam, Chennai",
+  "vehicle_type_id": "{{vehicleTypeId}}",
+  "payment_mode": "CASH"
+}
+
+### 2b) Request Ride (ONLINE payment mode example)
+# Run this only if you want ONLINE payment flow.
+# @name requestRideOnline
+POST {{baseUrl}}/api/customers/rides/request
+Content-Type: application/json
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+{
+  "pickup_lat": 12.9754605,
+  "pickup_lng": 80.2207047,
+  "pickup_address": "Guindy Metro Station, Chennai",
+  "drop_lat": 13.0066625,
+  "drop_lng": 80.2206369,
+  "drop_address": "T. Nagar Bus Stand, Chennai",
+  "vehicle_type_id": "{{vehicleTypeId}}",
+  "payment_mode": "ONLINE"
+}
+
+### 3) Confirm Ride
+# Optional body: "payment_mode": "ONLINE" | "CASH" — payment_status set to PENDING
+# @name confirmRide
+POST {{baseUrl}}/api/customers/rides/confirm
+Content-Type: application/json
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+{
+  "ride_id": "{{requestRide.response.body.$.ride_id}}"
+}
+
+### 3b) Confirm Ride (ONLINE payment mode example)
+# Run this only when using requestRideOnline.
+POST {{baseUrl}}/api/customers/rides/confirm
+Content-Type: application/json
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+{
+  "ride_id": "{{requestRideOnline.response.body.$.ride_id}}",
+  "payment_mode": "ONLINE"
+}
+
+### 4) Get Active Ride
+GET {{baseUrl}}/api/customers/rides/active
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+### 5) Ride Status
+GET {{baseUrl}}/api/customers/rides/{{requestRide.response.body.$.ride_id}}/status
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+### 6) Ride History
+GET {{baseUrl}}/api/customers/rides/history
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+### 7) Cancel Ride (works only when status is PENDING_CONFIRMATION or SEARCHING_DRIVER)
+# Do not run this if you plan to continue accept -> complete flow.
+POST {{baseUrl}}/api/customers/rides/{{requestRide.response.body.$.ride_id}}/cancel
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+### 8) Create Payment Order (only for COMPLETED + ONLINE ride)
+# @name createPaymentOrder
+POST {{baseUrl}}/api/payments/create-order
+Content-Type: application/json
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+{
+  "ride_id": "{{requestRideOnline.response.body.$.ride_id}}"
+}
+
+### 9) Verify Payment
+# signature should be generated on client/server using Razorpay flow:
+# hmac_sha256(order_id + "|" + payment_id, RAZORPAY_KEY_SECRET)
+# Quick test sequence:
+# 1) Run "8) Create Payment Order" first.
+# 2) Copy returned order_id and set @testPaymentId / @testSignature.
+# 3) Execute this request and expect 200 with payment_status: SUCCESS.
+POST {{baseUrl}}/api/payments/verify
+Content-Type: application/json
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+{
+  "ride_id": "{{requestRideOnline.response.body.$.ride_id}}",
+  "order_id": "{{createPaymentOrder.response.body.$.order_id}}",
+  "payment_id": "{{testPaymentId}}",
+  "signature": "{{testSignature}}"
+}
+
+### 9b) Payment Integration Checklist (under 2 minutes)
+# [ ] Preconditions: ride is COMPLETED and payment_mode is ONLINE
+# [ ] Step 1: Execute "8) Create Payment Order"
+# [ ] Assert response contains: order_id, amount, currency, key
+# [ ] Step 2: Run Razorpay checkout using order_id and collect payment_id + signature
+# [ ] Step 3: Set @testPaymentId and @testSignature above
+# [ ] Step 4: Execute "9) Verify Payment"
+# [ ] Assert response: payment_status == SUCCESS
+# [ ] Step 5: Execute "4) Get Active Ride" or "5) Ride Status" to confirm ride payment_status == SUCCESS
+
+### 10) Customer Invoice
+GET {{baseUrl}}/api/customers/rides/{{requestRide.response.body.$.ride_id}}/invoice
+Authorization: Bearer {{customerLogin.response.body.$.token}}

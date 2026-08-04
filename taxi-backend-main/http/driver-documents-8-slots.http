@@ -1,0 +1,126 @@
+###############################################################################
+# Driver KYC (8 Upload Calls) - REST Client
+# Uses same local PDF for quick testing:
+#   C:/Users/ashwi/Downloads/truck.pdf
+###############################################################################
+
+@baseUrl = http://localhost:3000
+@driverEmail = driver04@yopmail.com
+@driverPassword = driver112233
+@uploadFile = C:/Users/ashwi/Downloads/truck.pdf
+
+### Login (run first)
+# @name driverKyc8Login
+POST {{baseUrl}}/api/drivers/login
+Content-Type: application/json
+
+{
+  "email": "{{driverEmail}}",
+  "password": "{{driverPassword}}"
+}
+
+###
+# Token note:
+# Use {{driverKyc8Login.response.body.$.token}} directly in Authorization headers.
+
+### 1) Aadhaar Front - IDENTITY
+POST {{baseUrl}}/api/drivers/documents/upload?document_type=IDENTITY
+Authorization: Bearer {{driverKyc8Login.response.body.$.token}}
+Content-Type: multipart/form-data; boundary=----Upload01
+
+------Upload01
+Content-Disposition: form-data; name="file"; filename="aadhaar-front.pdf"
+Content-Type: application/pdf
+
+< {{uploadFile}}
+------Upload01--
+
+### 2) Aadhaar Back - IDENTITY
+POST {{baseUrl}}/api/drivers/documents/upload?document_type=IDENTITY
+Authorization: Bearer {{driverKyc8Login.response.body.$.token}}
+Content-Type: multipart/form-data; boundary=----Upload02
+
+------Upload02
+Content-Disposition: form-data; name="aadhar"; filename="aadhaar-back.pdf"
+Content-Type: application/pdf
+
+< {{uploadFile}}
+------Upload02--
+
+### 3) PAN Front - IDENTITY
+POST {{baseUrl}}/api/drivers/documents/upload?document_type=IDENTITY
+Authorization: Bearer {{driverKyc8Login.response.body.$.token}}
+Content-Type: multipart/form-data; boundary=----Upload03
+
+------Upload03
+Content-Disposition: form-data; name="document"; filename="pan-front.pdf"
+Content-Type: application/pdf
+
+< {{uploadFile}}
+------Upload03--
+
+### 4) PAN Back - IDENTITY
+POST {{baseUrl}}/api/drivers/documents/upload?document_type=IDENTITY
+Authorization: Bearer {{driverKyc8Login.response.body.$.token}}
+Content-Type: multipart/form-data; boundary=----Upload04
+
+------Upload04
+Content-Disposition: form-data; name="file"; filename="pan-back.pdf"
+Content-Type: application/pdf
+
+< {{uploadFile}}
+------Upload04--
+
+### 5) License Front - IDENTITY
+POST {{baseUrl}}/api/drivers/documents/upload?document_type=IDENTITY
+Authorization: Bearer {{driverKyc8Login.response.body.$.token}}
+Content-Type: multipart/form-data; boundary=----Upload05
+
+------Upload05
+Content-Disposition: form-data; name="file"; filename="license-front.pdf"
+Content-Type: application/pdf
+
+< {{uploadFile}}
+------Upload05--
+
+### 6) License Back - IDENTITY
+POST {{baseUrl}}/api/drivers/documents/upload?document_type=IDENTITY
+Authorization: Bearer {{driverKyc8Login.response.body.$.token}}
+Content-Type: multipart/form-data; boundary=----Upload06
+
+------Upload06
+Content-Disposition: form-data; name="file"; filename="license-back.pdf"
+Content-Type: application/pdf
+
+< {{uploadFile}}
+------Upload06--
+
+### 7) Insurance - VEHICLE
+POST {{baseUrl}}/api/drivers/documents/upload?document_type=VEHICLE
+Authorization: Bearer {{driverKyc8Login.response.body.$.token}}
+Content-Type: multipart/form-data; boundary=----Upload07
+
+------Upload07
+Content-Disposition: form-data; name="file"; filename="vehicle-insurance.pdf"
+Content-Type: application/pdf
+
+< {{uploadFile}}
+------Upload07--
+
+### 8) PUC - VEHICLE
+POST {{baseUrl}}/api/drivers/documents/upload?document_type=VEHICLE
+Authorization: Bearer {{driverKyc8Login.response.body.$.token}}
+Content-Type: multipart/form-data; boundary=----Upload08
+
+------Upload08
+Content-Disposition: form-data; name="file"; filename="puc-certificate.pdf"
+Content-Type: application/pdf
+
+< {{uploadFile}}
+------Upload08--
+
+### List uploaded docs (expect 8 new rows)
+# @name driverKyc8List
+GET {{baseUrl}}/api/drivers/documents
+Authorization: Bearer {{driverKyc8Login.response.body.$.token}}
+

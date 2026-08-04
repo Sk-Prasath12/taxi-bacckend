@@ -1,0 +1,63 @@
+@baseUrl = http://localhost:3000
+@adminEmail = suadmintaxi@gmail.com
+@adminPassword = Admin@123
+@driverId = 69d370ad6ac3d784378882d0
+@rideId = 69d370ad6ac3d784378882d0
+
+### 1) Admin Login
+# @name adminLogin
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "{{adminPassword}}"
+}
+
+### 2) Driver List API (pagination + search)
+# @name adminDriversList
+GET {{baseUrl}}/api/admin/drivers?page=1&limit=10&search=driver
+Authorization: Bearer {{adminLogin.response.body.$.data.accessToken}}
+
+### Optional helper: auto-pick first driver id from list response
+# @driverId = {{adminDriversList.response.body.$.drivers[0].id}}
+
+### 3) Driver Get API
+GET {{baseUrl}}/api/admin/drivers/{{driverId}}
+Authorization: Bearer {{adminLogin.response.body.$.data.accessToken}}
+
+### 4) Driver Block API (reason required)
+PATCH {{baseUrl}}/api/admin/drivers/{{driverId}}/block
+Content-Type: application/json
+Authorization: Bearer {{adminLogin.response.body.$.data.accessToken}}
+
+{
+  "is_blocked": true,
+  "reason": "Policy violation / temporary hold"
+}
+
+### 5) Driver Unblock API
+PATCH {{baseUrl}}/api/admin/drivers/{{driverId}}/block
+Content-Type: application/json
+Authorization: Bearer {{adminLogin.response.body.$.data.accessToken}}
+
+{
+  "is_blocked": false
+}
+
+### 6) Driver Rides List API
+# @name adminDriverRides
+GET {{baseUrl}}/api/admin/drivers/{{driverId}}/rides
+Authorization: Bearer {{adminLogin.response.body.$.data.accessToken}}
+
+### Optional helper: auto-pick first ride id from driver rides response
+# @rideId = {{adminDriverRides.response.body.$.rides[0].ride_id}}
+
+### 7) Driver Ride Get API (full details)
+# NOTE:
+# - rideId must be a ride id from step 6 for the SAME driverId.
+# - Do not use driverId as rideId.
+# - If rides array is empty in step 6, this endpoint will return "Ride not found for this driver".
+GET {{baseUrl}}/api/admin/drivers/{{driverId}}/rides/69ef0152e7bc5f8a50edff4c
+Authorization: Bearer {{adminLogin.response.body.$.data.accessToken}}
+

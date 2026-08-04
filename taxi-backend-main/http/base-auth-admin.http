@@ -1,0 +1,28 @@
+@baseUrl = http://localhost:3000
+@adminEmail = admin@taxigo.com
+@adminPassword = admin123
+
+### Health
+GET {{baseUrl}}/api/v1/health
+
+### Login (ADMIN)
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "{{adminPassword}}"
+}
+
+### Refresh
+POST {{baseUrl}}/api/v1/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "PASTE_REFRESH_TOKEN_HERE"
+}
+
+### Admin Protected Test
+GET {{baseUrl}}/api/v1/admin/test
+Authorization: Bearer PASTE_ACCESS_TOKEN_HERE
+

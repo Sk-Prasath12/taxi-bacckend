@@ -1,0 +1,35 @@
+@baseUrl = http://localhost:3000
+@adminToken = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2OWI3YjU3MWQ3MTA3MzZjOWE3NTIxY2QiLCJyb2xlIjoiQURNSU4iLCJ0eXBlIjoiYWNjZXNzIiwiaWF0IjoxNzc0MjU1NzQyLCJleHAiOjE3NzQyNTY2NDJ9.xaco82clGIIDK2CRkL7tR6S58yys9lFXawNcAATbfTg
+@driverId = 69ba8eefb07633f1036ff781
+
+### 1) Admin Revenue Summary
+GET {{baseUrl}}/api/admin/revenue/summary
+Authorization: Bearer {{adminToken}}
+
+### 2) Admin Revenue List
+GET {{baseUrl}}/api/admin/revenue/list
+Authorization: Bearer {{adminToken}}
+
+### 3) Admin Driver Due
+GET {{baseUrl}}/api/admin/driver/{{driverId}}/due
+Authorization: Bearer {{adminToken}}
+
+### 3b) Admin Invoice List
+GET {{baseUrl}}/api/admin/invoices
+Authorization: Bearer {{adminToken}}
+
+### 4) [v1] Admin Revenue Summary
+GET {{baseUrl}}/api/v1/admin/revenue/summary
+Authorization: Bearer {{adminToken}}
+
+### 5) [v1] Admin Revenue List
+GET {{baseUrl}}/api/v1/admin/revenue/list
+Authorization: Bearer {{adminToken}}
+
+### 5b) [v1] Admin Invoice List
+GET {{baseUrl}}/api/v1/admin/invoices
+Authorization: Bearer {{adminToken}}
+
+
+
+

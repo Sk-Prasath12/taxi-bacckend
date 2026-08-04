@@ -1,0 +1,181 @@
+# Driver + customer signup → admin dummy approve → rides
+
+
+
+@baseUrl = http://localhost:3000
+
+@driverApi = {{baseUrl}}/api/drivers
+
+@adminApi = {{baseUrl}}/api/admin
+
+@adminEmail = admin@taxigo.com
+
+@adminPassword = admin123
+
+
+
+# Change to your test users (Kiruba driver / Sruthi customer emails)
+
+@driverEmail = kiruba12@yopmail.com
+
+@customerEmail = sruthi07@yopmail.com
+
+@driverEmail = sridharshini@yopmail.com
+
+
+
+### Admin login (run first — token used below)
+
+# @name adminLogin
+
+POST {{baseUrl}}/api/v1/auth/login
+
+Content-Type: application/json
+
+
+
+{
+
+  "email": "{{adminEmail}}",
+
+  "password": "{{adminPassword}}"
+
+}
+
+
+
+@adminToken = {{adminLogin.response.body.$.data.accessToken}}
+
+
+
+### Driver: register email
+
+POST {{driverApi}}/register/email
+
+Content-Type: application/json
+
+
+
+{
+
+  "email": "{{driverEmail}}"
+
+}
+
+
+
+### Driver: verify OTP (123456 works when email SMTP fails)
+
+POST {{driverApi}}/register/verify-otp
+
+Content-Type: application/json
+
+
+
+{
+
+  "email": "{{driverEmail}}",
+
+  "otp": "123456"
+
+}
+
+
+
+### Driver: set password (creates MongoDB user — still PENDING until admin approves)
+
+POST {{driverApi}}/register/set-password
+
+Content-Type: application/json
+
+
+
+{
+
+  "email": "{{driverEmail}}",
+
+  "password": "driver12345"
+
+}
+
+
+
+### Admin: approve driver by email (NO documents required)
+
+POST {{adminApi}}/drivers/approve-by-email
+
+Authorization: Bearer {{adminToken}}
+
+Content-Type: application/json
+
+
+
+{
+
+  "email": "{{driverEmail}}"
+
+}
+
+
+
+### Admin: approve customer by email (activate booking)
+
+POST {{adminApi}}/customers/approve-by-email
+
+Authorization: Bearer {{adminToken}}
+
+Content-Type: application/json
+
+
+
+{
+
+  "email": "{{customerEmail}}"
+
+}
+
+
+
+### Admin: list drivers pending verification
+
+GET {{adminApi}}/drivers/verification
+
+Authorization: Bearer {{adminToken}}
+
+
+
+### Driver login after approval
+
+POST {{driverApi}}/login
+
+Content-Type: application/json
+
+
+
+{
+
+  "email": "{{driverEmail}}",
+
+  "password": "driver12345"
+
+}
+
+
+
+### Driver go ONLINE (requires admin approval above)
+
+PATCH {{driverApi}}/status
+
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+Content-Type: application/json
+
+
+
+{
+
+  "status": "ONLINE"
+
+}
+
+

@@ -1,0 +1,96 @@
+###############################################################################
+# Driver — KYC / document APIs (role DRIVER JWT only)
+# Base: all routes are under {{baseUrl}} (no /api/v1 prefix).
+#
+# VS Code REST Client: use # @name (hash), not ### @name.
+# Flow: 1) Send "Driver login"  2) Send "Set token" OR rely on named response
+#       3) List documents → copy an `id` into @documentId, or use auto line below
+#
+# Admin verification (list all drivers, approve docs, final approve):
+#   → http/admin-driver-documents-admin.http
+###############################################################################
+
+@baseUrl = http://localhost:3000
+@driverEmail = driver03@yopmail.com
+@driverPassword = driver123344
+
+# Replace after GET list (or use the optional line that reads from driverDocumentsList)
+@documentId = REPLACE_WITH_DOCUMENT_OBJECT_ID
+
+###############################################################################
+### 1) Driver login — send first
+###############################################################################
+# @name driverDocumentsLogin
+POST {{baseUrl}}/api/drivers/login
+Content-Type: application/json
+
+{
+  "email": "{{driverEmail}}",
+  "password": "{{driverPassword}}"
+}
+
+###############################################################################
+### 2) Bearer token (response shape: { "token": "eyJ..." , "user": { ... } })
+###############################################################################
+@driverDocumentsToken = {{driverDocumentsLogin.response.body.$.token}}
+
+###############################################################################
+### 3) POST — upload document (multipart: one file; field name file | aadhar | document)
+# Query document_type (required): IDENTITY | VEHICLE | BANK | PERSONAL
+# Max file size: 15 MB. Point < ./...> to a real file on your machine.
+###############################################################################
+POST {{baseUrl}}/api/drivers/documents/upload?document_type=IDENTITY
+Authorization: Bearer {{driverDocumentsToken}}
+Content-Type: multipart/form-data; boundary=----DriverDocUpload
+
+------DriverDocUpload
+Content-Disposition: form-data; name="file"; filename="identity.pdf"
+Content-Type: application/pdf
+
+< ./path/to/your-document.pdf
+------DriverDocUpload--
+
+### Upload — same pattern, other types (duplicate block and change query + file if needed)
+# POST {{baseUrl}}/api/drivers/documents/upload?document_type=VEHICLE
+# POST {{baseUrl}}/api/drivers/documents/upload?document_type=BANK
+# POST {{baseUrl}}/api/drivers/documents/upload?document_type=PERSONAL
+
+###############################################################################
+### 4) GET — list my documents
+###############################################################################
+# @name driverDocumentsList
+GET {{baseUrl}}/api/drivers/documents
+Authorization: Bearer {{driverDocumentsToken}}
+
+###############################################################################
+### 5) Optional: pull first document id from list (send request 4 first)
+###############################################################################
+# @documentId = {{driverDocumentsList.response.body.$.data[0].id}}
+
+###############################################################################
+### 6) GET — single document metadata by id
+###############################################################################
+GET {{baseUrl}}/api/drivers/documents/{{documentId}}
+Authorization: Bearer {{driverDocumentsToken}}
+
+###############################################################################
+### 7) GET — download file (200 + streamed body; save response in REST Client)
+###############################################################################
+GET {{baseUrl}}/api/drivers/documents/{{documentId}}/download
+Authorization: Bearer {{driverDocumentsToken}}
+
+###############################################################################
+### 8) PUT — re-upload file (only when that document status is REJECTED)
+# Same multipart rules as upload. Field: file | aadhar | document
+###############################################################################
+PUT {{baseUrl}}/api/drivers/documents/{{documentId}}/reupload
+Authorization: Bearer {{driverDocumentsToken}}
+Content-Type: multipart/form-data; boundary=----DriverDocReupload
+
+------DriverDocReupload
+Content-Disposition: form-data; name="file"; filename="identity-v2.pdf"
+Content-Type: application/pdf
+
+< ./path/to/your-document.pdf
+------DriverDocReupload--
+

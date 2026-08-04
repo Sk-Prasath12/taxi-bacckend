@@ -1,0 +1,92 @@
+@baseUrl = http://localhost:3000
+@adminEmail = suadmintaxi@gmail.com
+@adminPassword = Admin@123
+
+### Set from list responses or MongoDB
+@driverId = 69cf96bf2fdb2596603b3f15
+@documentId = REPLACE_WITH_DOCUMENT_OBJECT_ID
+
+# --- How to avoid "Invalid or expired token" ---
+# 1) Send "Admin login" below FIRST (same file). Token is copied into @adminAccessToken on the next line.
+# 2) Then send any GET/PATCH — they use Bearer {{adminAccessToken}} (reliable in REST Client).
+# 3) Token expires per JWT_ACCESS_EXPIRES_IN (often 15m) — log in again if needed.
+# 4) Postman: ignore @ lines; copy data.accessToken from login JSON into Bearer manually.
+# 5) Unique @name avoids clashing with other .http files that also define admin login.
+
+###############################################################################
+### Admin login — SEND THIS FIRST
+###############################################################################
+# @name adminLoginDriverVerification
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "{{adminPassword}}"
+}
+
+###
+# Pull token from login JSON — REST Client needs # @name above (not ###) and .$ in the JSON path
+@adminAccessToken = {{adminLoginDriverVerification.response.body.$.data.accessToken}}
+
+###############################################################################
+### Driver verification & documents (uses @adminAccessToken from login above)
+###############################################################################
+
+### 1) List drivers pending verification
+GET {{baseUrl}}/api/v1/admin/drivers/verification
+Authorization: Bearer {{adminAccessToken}}
+
+### 1b) Same without v1 prefix
+GET {{baseUrl}}/api/admin/drivers/verification
+Authorization: Bearer {{adminAccessToken}}
+
+### 2) List all documents for a driver
+GET {{baseUrl}}/api/v1/admin/drivers/69cf96bf2fdb2596603b3f15/documents
+Authorization: Bearer {{adminAccessToken}}
+
+### 3) Download a document file (redirects to S3 URL)
+GET {{baseUrl}}/api/v1/admin/documents/69cf9b9af9e52e25555c0f1b/download
+Authorization: Bearer {{adminAccessToken}}
+
+### 4) Approve document
+PATCH {{baseUrl}}/api/v1/admin/documents/69d349fcc974d09e20111a73/status
+Content-Type: application/json
+Authorization: Bearer {{adminAccessToken}}
+
+{
+  "status": "APPROVED"
+}
+
+### 5) Reject document (reason required)
+PATCH {{baseUrl}}/api/v1/admin/documents/69cf9b9af9e52e25555c0f1b/status
+Content-Type: application/json
+Authorization: Bearer {{adminAccessToken}}
+
+{
+  "status": "REJECTED",
+  "reason": "Document is blurry; please upload a clearer scan."
+}
+
+### 6) Final driver approval — documents OPTIONAL; one click approves account + minimal profile
+PATCH {{baseUrl}}/api/v1/admin/drivers/69cf96bf2fdb2596603b3f15/approve
+Authorization: Bearer {{adminAccessToken}}
+
+### 6b) Approve driver by email (no document upload needed)
+POST {{baseUrl}}/api/v1/admin/drivers/approve-by-email
+Authorization: Bearer {{adminAccessToken}}
+Content-Type: application/json
+
+{
+  "email": "kiruba.driver@yopmail.com"
+}
+
+### 6c) Approve customer by email (Sruthi / any customer)
+POST {{baseUrl}}/api/v1/admin/customers/approve-by-email
+Authorization: Bearer {{adminAccessToken}}
+Content-Type: application/json
+
+{
+  "email": "sruthi.customer@yopmail.com"
+}
+

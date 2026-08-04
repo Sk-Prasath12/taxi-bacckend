@@ -1,0 +1,30 @@
+@baseUrl = http://localhost:3000
+@adminEmail = suadmintaxi@gmail.com
+@adminPassword = Admin@123
+
+### 1) Admin Login
+# @name adminLogin
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "{{adminPassword}}"
+}
+
+### 2) Admin Dashboard Metrics (non-v1)
+GET {{baseUrl}}/api/admin/dashboard/metrics
+Authorization: Bearer {{adminLogin.response.body.$.data.accessToken}}
+
+### 3) Admin Dashboard Metrics (v1)
+GET {{baseUrl}}/api/v1/admin/dashboard/metrics
+Authorization: Bearer {{adminLogin.response.body.$.data.accessToken}}
+
+### 4) Active Drivers List (non-v1)
+GET {{baseUrl}}/api/admin/drivers/active
+Authorization: Bearer {{adminLogin.response.body.$.data.accessToken}}
+
+### 5) Active Drivers List (v1)
+GET {{baseUrl}}/api/v1/admin/drivers/active
+Authorization: Bearer {{adminLogin.response.body.$.data.accessToken}}
+

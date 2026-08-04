@@ -1,0 +1,92 @@
+@baseUrl = http://localhost:3000
+@customerEmail = customer02@yopmail.com
+@customerPassword = ashwin123
+@driverEmail = driver01@yopmail.com
+@driverPassword = Driver@123
+
+# QUICK REALTIME TEST (1 minute):
+# 1) In customer tab: connect socket, emit "join" with role "customer"
+# 2) In driver tab: connect socket, emit "join" with role "driver"
+# 3) Run requests in order from this file
+# 4) After step 5 (accept), both sides are in ride_<rideId> room
+# 5) Driver tab emits "driver_location"; customer listens "driver_location_update"
+
+### Health
+GET {{baseUrl}}/api/v1/health
+
+### 1) Customer Login (token used in socket auth)
+# @name customerLogin
+POST {{baseUrl}}/api/customers/login
+Content-Type: application/json
+
+{
+  "email": "{{customerEmail}}",
+  "password": "{{customerPassword}}"
+}
+
+### 2) Driver Login (token used in socket auth)
+# @name driverLogin
+POST {{baseUrl}}/api/drivers/login
+Content-Type: application/json
+
+{
+  "email": "{{driverEmail}}",
+  "password": "{{driverPassword}}"
+}
+
+### 3) Customer Request Ride
+# @name requestRide
+POST {{baseUrl}}/api/customers/rides/request
+Content-Type: application/json
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+{
+  "pickup_lat": 12.9754605,
+  "pickup_lng": 80.2207047,
+  "drop_lat": 13.0066625,
+  "drop_lng": 80.2206369,
+  "vehicle_type_id": "69b8f3b0d21fa0448070ed83"
+}
+
+### 4) Customer Confirm Ride
+# Expected socket event on driver side: "new_ride"
+POST {{baseUrl}}/api/customers/rides/confirm
+Content-Type: application/json
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+{
+  "ride_id": "{{requestRide.response.body.$.ride_id}}"
+}
+
+### 5) Driver Accept Ride
+# Expected socket event on customer side: "ride_accepted"
+POST {{baseUrl}}/api/drivers/rides/{{requestRide.response.body.$.ride_id}}/accept
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### 6) Driver Arrived
+# Expected socket event on customer side: "ride_status_update" (ARRIVED_AT_PICKUP)
+POST {{baseUrl}}/api/drivers/rides/{{requestRide.response.body.$.ride_id}}/arrived
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### 7) Driver Picked Up
+# Expected socket event on customer side: "ride_status_update" (PICKED_UP)
+POST {{baseUrl}}/api/drivers/rides/{{requestRide.response.body.$.ride_id}}/picked-up
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### 8) Driver In Transit
+# Expected socket event on customer side: "ride_status_update" (IN_TRANSIT)
+POST {{baseUrl}}/api/drivers/rides/{{requestRide.response.body.$.ride_id}}/in-transit
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### 9) Driver Dropped
+# Expected socket event on customer side: "ride_status_update" (COMPLETED)
+POST {{baseUrl}}/api/drivers/rides/{{requestRide.response.body.$.ride_id}}/dropped
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### 10) Verify room-based live tracking
+# In DRIVER browser tab:
+# driverSocket.emit("driver_location", { rideId: "{{requestRide.response.body.$.ride_id}}", lat: 12.9716, lng: 80.22 })
+#
+# In CUSTOMER browser tab:
+# customerSocket.on("driver_location_update", (data) => console.log("LIVE DRIVER", data))
+

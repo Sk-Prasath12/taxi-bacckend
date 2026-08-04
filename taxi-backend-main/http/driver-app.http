@@ -1,0 +1,105 @@
+@baseUrl = http://localhost:3000
+@driverEmail = driver01@yopmail.com
+@driverPassword = Driver@123
+@rideId = REPLACE_WITH_RIDE_ID
+
+### Health
+GET {{baseUrl}}/api/v1/health
+
+### Driver App Login
+# @name driverAppLogin
+POST {{baseUrl}}/api/driver-app/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{driverEmail}}",
+  "password": "{{driverPassword}}"
+}
+
+### Driver Profile
+GET {{baseUrl}}/api/driver-app/driver/profile
+Authorization: Bearer {{driverAppLogin.response.body.$.token}}
+
+### Driver Status Online
+POST {{baseUrl}}/api/driver-app/driver/status/online
+Authorization: Bearer {{driverAppLogin.response.body.$.token}}
+
+### Driver Status
+GET {{baseUrl}}/api/driver-app/driver/status
+Authorization: Bearer {{driverAppLogin.response.body.$.token}}
+
+### Available Rides
+GET {{baseUrl}}/api/driver-app/rides/available
+Authorization: Bearer {{driverAppLogin.response.body.$.token}}
+
+### Accept Ride
+POST {{baseUrl}}/api/driver-app/rides/accept
+Authorization: Bearer {{driverAppLogin.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "ride_id": "{{rideId}}"
+}
+
+### Mark Arrived
+POST {{baseUrl}}/api/driver-app/rides/arrived
+Authorization: Bearer {{driverAppLogin.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "ride_id": "{{rideId}}"
+}
+
+### Start Ride (auto-verifies stored OTP)
+POST {{baseUrl}}/api/driver-app/rides/start
+Authorization: Bearer {{driverAppLogin.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "ride_id": "{{rideId}}"
+}
+
+### Pickup Confirm
+POST {{baseUrl}}/api/driver-app/rides/pickup-confirm
+Authorization: Bearer {{driverAppLogin.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "ride_id": "{{rideId}}"
+}
+
+### Complete Ride
+POST {{baseUrl}}/api/driver-app/rides/complete
+Authorization: Bearer {{driverAppLogin.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "ride_id": "{{rideId}}"
+}
+
+### Current Ride
+GET {{baseUrl}}/api/driver-app/rides/current
+Authorization: Bearer {{driverAppLogin.response.body.$.token}}
+
+### Ride History
+GET {{baseUrl}}/api/driver-app/rides/history
+Authorization: Bearer {{driverAppLogin.response.body.$.token}}
+
+### Wallet Balance
+GET {{baseUrl}}/api/driver-app/wallet/balance
+Authorization: Bearer {{driverAppLogin.response.body.$.token}}
+
+### Earnings Summary
+GET {{baseUrl}}/api/driver-app/rides/earnings/summary
+Authorization: Bearer {{driverAppLogin.response.body.$.token}}
+
+### Support Ticket Create
+POST {{baseUrl}}/api/driver-app/support/ticket/create
+Authorization: Bearer {{driverAppLogin.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "subject": "Driver app issue",
+  "description": "Unable to see all rides",
+  "ride_id": "{{rideId}}"
+}

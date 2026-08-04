@@ -1,0 +1,99 @@
+@baseUrl = http://localhost:3000
+@customerName = ashwin customer
+@customerPhone = 8248995378
+@customerEmail = customer01@yopmail.com
+@customerPassword = ashwin123
+@forgotEmail = customer02@yopmail.com
+
+### Health
+GET {{baseUrl}}/api/v1/health
+
+### 1) Send OTP
+POST {{baseUrl}}/api/customers/register/email
+Content-Type: application/json
+
+{
+  "name": "{{customerName}}",
+  "phone": "{{customerPhone}}",
+  "email": "{{customerEmail}}"
+}
+
+### 2) Verify OTP
+POST {{baseUrl}}/api/customers/register/verify-otp
+Content-Type: application/json
+
+{
+  "email": "{{customerEmail}}",
+  "otp": "123456"
+}
+
+### 3) Set Password (creates account + returns token)
+POST {{baseUrl}}/api/customers/register/set-password
+Content-Type: application/json
+
+{
+  "email": "{{customerEmail}}",
+  "password": "{{customerPassword}}"
+}
+
+### 4) Customer Login
+# @name customerLogin
+POST {{baseUrl}}/api/customers/login
+Content-Type: application/json
+
+{
+  "email": "{{customerEmail}}",
+  "password": "{{customerPassword}}"
+}
+
+### 5) Get Customer Profile
+GET {{baseUrl}}/api/customers/profile
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+### 6) Update Customer Profile
+PATCH {{baseUrl}}/api/customers/profile
+Content-Type: application/json
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+{
+  "name": "{{customerName}}",
+  "phone": "9876543210"
+}
+
+### 7) Forgot Password - Send OTP
+POST {{baseUrl}}/api/customers/forgot-password/email
+Content-Type: application/json
+
+{
+  "email": "{{forgotEmail}}"
+}
+
+### 8) Forgot Password - Verify OTP
+POST {{baseUrl}}/api/customers/forgot-password/verify-otp
+Content-Type: application/json
+
+{
+  "email": "{{forgotEmail}}",
+  "otp": "123456"
+}
+
+### 9) Forgot Password - Set New Password
+POST {{baseUrl}}/api/customers/forgot-password/set-password
+Content-Type: application/json
+
+{
+  "email": "{{forgotEmail}}",
+  "password": "{{customerPassword}}"
+}
+
+### 10) Change Password (logged in customer)
+POST {{baseUrl}}/api/customers/change-password
+Content-Type: application/json
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+{
+  "email": "{{customerEmail}}",
+  "oldPassword": "{{customerPassword}}",
+  "newPassword": "ashwin1234"
+}
+

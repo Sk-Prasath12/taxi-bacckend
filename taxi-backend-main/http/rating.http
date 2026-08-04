@@ -1,0 +1,66 @@
+@baseUrl = http://localhost:3000
+@customerEmail = customer02@yopmail.com
+@customerPassword = ashwin123
+@driverEmail = driver01@yopmail.com
+@driverPassword = Driver@123
+@rideId = 69c25340cef152bffc779994
+
+### 1) Customer Login
+# @name customerLogin
+POST {{baseUrl}}/api/customers/login
+Content-Type: application/json
+
+{
+  "email": "{{customerEmail}}",
+  "password": "{{customerPassword}}"
+}
+
+### 2) Driver Login
+# @name driverLogin
+POST {{baseUrl}}/api/drivers/login
+Content-Type: application/json
+
+{
+  "email": "{{driverEmail}}",
+  "password": "{{driverPassword}}"
+}
+
+### 3) Customer Rates Driver
+POST {{baseUrl}}/api/ratings
+Content-Type: application/json
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+{
+  "ride_id": "{{rideId}}",
+  "rating": 4,
+  "review": "Good ride"
+}
+
+### 4) Driver Rates Customer
+POST {{baseUrl}}/api/ratings
+Content-Type: application/json
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+{
+  "ride_id": "{{rideId}}",
+  "rating": 4,
+  "review": "Polite customer"
+}
+
+### 5) Ratings Received By Logged-in Customer
+GET {{baseUrl}}/api/ratings/me
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+### 6) Ratings Received By Logged-in Driver
+GET {{baseUrl}}/api/ratings/me
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### 7) Customer Rating Summary
+GET {{baseUrl}}/api/ratings/me/summary
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+### 8) Driver Rating Summary
+GET {{baseUrl}}/api/ratings/me/summary
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+

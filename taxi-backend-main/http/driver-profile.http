@@ -1,0 +1,50 @@
+@baseUrl = http://localhost:3000
+@v1DriverBase = {{baseUrl}}/api/v1/driver
+@driverEmail = driver04@yopmail.com
+@driverPassword = driver112233
+
+### Optional: list vehicle types (pick an _id for vehicle_type_id above)
+GET {{baseUrl}}/api/vehicle-types/active
+
+### Login (driver) — run first; token is used below
+# @name driverLogin
+POST {{baseUrl}}/api/drivers/login
+Content-Type: application/json
+
+{
+  "email": "{{driverEmail}}",
+  "password": "{{driverPassword}}"
+}
+
+### 1) Create or update driver profile (POST /api/v1/driver/profile)
+# Replace vehicle_type_id with a real id from GET /api/vehicle-types (or your DB)
+POST {{v1DriverBase}}/profile
+Content-Type: application/json
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+{
+  "dob": "1990-05-15T00:00:00.000Z",
+  "phone": "9876543210",
+  "address": "123 Main Street, City",
+  "emergency_contact": "9123456789",
+  "license_number": "DL-14-20190001234",
+  "vehicle_reg_number": "KA01AB1234",
+  "vehicle_type_id": "69ccb74bddc81405448a7124",
+  "vehicle_model": "Swift",
+  "vehicle_color": "White",
+  "pan_number": "ABCDE1234F",
+  "aadhaar_number": "123456789012",
+  "voter_id": "ASU235g333",
+  "account_holder_name": "John Driver",
+  "bank_name": "State Bank",
+  "branch_name": "MG Road",
+  "account_number": "12345678901",
+  "ifsc_code": "SBIN0001234",
+  "account_type": "Savings",
+  "upi_id": "driver03@upi"
+}
+
+### 2) Get driver profile (GET /api/v1/driver/profile)
+GET {{v1DriverBase}}/profile
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+

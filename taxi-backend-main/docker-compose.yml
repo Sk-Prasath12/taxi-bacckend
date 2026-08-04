@@ -1,0 +1,43 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: taxi_app_backend
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.local
+    environment:
+      - MONGO_URI=mongodb://taxiadmin:taxi123@mongo:27017/taxi_app?authSource=admin
+    depends_on:
+      - mongo
+      - osrm
+    restart: unless-stopped
+    command: sh -c "npm run seed && npm run dev"
+
+  mongo:
+    image: mongo:7
+    container_name: taxi_app_mongo
+    ports:
+      - "27018:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: taxiadmin
+      MONGO_INITDB_ROOT_PASSWORD: taxi123
+      MONGO_INITDB_DATABASE: taxi_app
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+
+  osrm:
+    image: osrm/osrm-backend
+    container_name: taxi_osrm
+    volumes:
+      - ../osrm-data/build:/data
+    command: osrm-routed --algorithm ch /data/combined.osrm
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
+
+volumes:
+  mongo_data:

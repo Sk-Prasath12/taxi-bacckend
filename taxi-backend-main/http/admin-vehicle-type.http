@@ -1,0 +1,24 @@
+@baseUrl = http://localhost:3000
+@adminEmail = suadmintaxi@gmail.com
+@adminPassword = Admin@123
+
+### 1) Admin Login
+# @name adminLogin
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "{{adminPassword}}"
+}
+
+### 2) Get All Vehicle Types
+# Note: This endpoint is public, token is optional.
+GET {{baseUrl}}/api/vehicle-types
+Authorization: Bearer {{adminLogin.response.body.$.data.accessToken}}
+
+### 3) Get Active Vehicle Types Only
+# Note: This endpoint is public, token is optional.
+GET {{baseUrl}}/api/vehicle-types/active
+Authorization: Bearer {{adminLogin.response.body.$.data.accessToken}}
+

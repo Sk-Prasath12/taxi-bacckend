@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+
+# OSRM map data (large — do not commit)
+osrm-data/
+osrm-data.zip
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+
+# IDE / tools
+.qoder/
+
+# OS
+Thumbs.db
+.DS_Store

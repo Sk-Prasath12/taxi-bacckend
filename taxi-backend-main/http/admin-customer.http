@@ -1,0 +1,50 @@
+@baseUrl = http://localhost:3000
+@adminEmail = suadmintaxi@gmail.com
+@adminPassword = Admin@123
+@customerId = REPLACE_CUSTOMER_ID_HERE
+
+### 1) Admin Login
+# @name adminLogin
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "{{adminPassword}}"
+}
+
+### 2) Admin Test (Protected)
+GET {{baseUrl}}/api/admin/test
+Authorization: Bearer {{adminLogin.response.body.$.data.accessToken}}
+
+### 3) Get All Customers (pagination + search)
+GET {{baseUrl}}/api/admin/customers?page=1&limit=10&search=customer
+Authorization: Bearer {{adminLogin.response.body.$.data.accessToken}}
+
+### 4) Get Customer Details
+GET {{baseUrl}}/api/admin/customers/69ccbcd7dff9ddd88d0b6f89
+Authorization: Bearer {{adminLogin.response.body.$.data.accessToken}}
+
+### 5) Block Customer (reason required)
+PATCH {{baseUrl}}/api/admin/customers/{{customerId}}/block
+Content-Type: application/json
+Authorization: Bearer {{adminLogin.response.body.$.data.accessToken}}
+
+{
+  "is_blocked": true,
+  "reason": "Fraud activity detected"
+}
+
+### 6) Unblock Customer (reason optional, auto-cleared)
+PATCH {{baseUrl}}/api/admin/customers/{{customerId}}/block
+Content-Type: application/json
+Authorization: Bearer {{adminLogin.response.body.$.data.accessToken}}
+
+{
+  "is_blocked": false
+}
+
+### 7) Get Customer Ride History
+GET {{baseUrl}}/api/admin/customers/69ccbcd7dff9ddd88d0b6f89/rides
+Authorization: Bearer {{adminLogin.response.body.$.data.accessToken}}
+

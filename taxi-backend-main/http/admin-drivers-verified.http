@@ -1,0 +1,34 @@
+###############################################################################
+# Admin — list verified drivers (KYC approved)
+# GET /api/v1/admin/drivers/verified  (handler on driver-documents admin router)
+# Returns drivers where is_driver_verified && driver_verification_status === APPROVED
+#
+# VS Code REST Client: send Admin login first (# @name), then Bearer token.
+# Restart the API after backend changes so this route is loaded.
+###############################################################################
+
+@baseUrl = http://localhost:3000
+@adminEmail = suadmintaxi@gmail.com
+@adminPassword = Admin@123
+
+### 1) Admin login
+# @name adminLoginVerifiedDrivers
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "{{adminPassword}}"
+}
+
+### 2) Token (login response: data.accessToken)
+@adminAccessToken = {{adminLoginVerifiedDrivers.response.body.$.data.accessToken}}
+
+### 3) List verified drivers (v1)
+GET {{baseUrl}}/api/v1/admin/drivers/verified
+Authorization: Bearer {{adminAccessToken}}
+
+### 4) List verified drivers (no v1 prefix — same handler)
+GET {{baseUrl}}/api/admin/drivers/verified
+Authorization: Bearer {{adminAccessToken}}
+

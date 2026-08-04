@@ -1,0 +1,110 @@
+@baseUrl = http://localhost:3000/api/drivers
+@driverEmail = skprasath201116@yopmail.com
+@driverPassword = driver1233456
+@driverOtp = 517205
+@token = 
+
+# INSTRUCTIONS:
+# 1. For NEW registration: Run requests 1 → 2 → 3 → 4 in order
+# 2. For EXISTING driver (forgot password): Run requests 9 → 10 → 11 → 4 in order
+# 3. After login (request 4), copy the token from response and paste it in @token above
+# 4. Then you can use requests 5-8 which require authentication
+# 5. Test OTP: You can always use 123456 for testing purposes
+
+### 1) Send OTP
+POST {{baseUrl}}/register/email
+Content-Type: application/json
+
+{
+  "email": "{{driverEmail}}"
+}
+
+### 2) Verify OTP
+# NOTE: To avoid "400 Bad Request", you MUST run the "1) Send OTP" request first!
+# It creates the OTP session in the database. 123456 is a static testing OTP.
+POST {{baseUrl}}/register/verify-otp
+Content-Type: application/json
+
+{
+  "email": "{{driverEmail}}",
+  "otp": "{{driverOtp}}"
+}
+
+### 3) Set Password
+# If this email already exists, registration will fail with 409. Use the forgot password flow instead.
+POST {{baseUrl}}/register/set-password
+Content-Type: application/json
+
+{
+  "email": "{{driverEmail}}",
+  "password": "{{driverPassword}}"
+}
+
+### 4) Login
+# @name driverLogin
+# IMPORTANT: After running this, copy the "token" value from the response
+# and paste it in the @token variable at the top of this file!
+POST {{baseUrl}}/login
+Content-Type: application/json
+
+{
+  "email": "{{driverEmail}}",
+  "password": "{{driverPassword}}"
+}
+
+### 5) Get Driver Profile
+GET {{baseUrl}}/profile
+Authorization: Bearer {{token}}
+
+### 6) Set Driver Status ONLINE
+PATCH {{baseUrl}}/status
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "status": "ONLINE"
+}
+
+### 7) Set Driver Status BUSY
+PATCH {{baseUrl}}/status
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "status": "BUSY"
+}
+
+### 8) Set Driver Status OFFLINE
+PATCH {{baseUrl}}/status
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "status": "OFFLINE"
+}
+
+### 9) Forgot Password - Send OTP
+POST {{baseUrl}}/forgot-password/email
+Content-Type: application/json
+
+{
+  "email": "{{driverEmail}}"
+}
+
+### 10) Forgot Password - Verify OTP
+POST {{baseUrl}}/forgot-password/verify-otp
+Content-Type: application/json
+
+{
+  "email": "{{driverEmail}}",
+  "otp": "723630"
+}
+
+### 11) Forgot Password - Set New Password
+POST {{baseUrl}}/forgot-password/set-password
+Content-Type: application/json
+
+{
+  "email": "{{driverEmail}}",
+  "password": "{{driverPassword}}"
+}

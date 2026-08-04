@@ -1,0 +1,73 @@
+@baseUrl = http://localhost:3000
+@adminEmail = suadmintaxi@gmail.com
+@adminPassword = Admin@123
+@zoneId = 69ccd238a03f3e28b3347ab8
+
+### 1) Admin Login
+# @name adminLogin
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "{{adminPassword}}"
+}
+
+### 2) Create Operational Zone
+# Polygon format: [lng, lat]
+POST {{baseUrl}}/api/admin/operational-zones
+Content-Type: application/json
+Authorization: Bearer {{adminLogin.response.body.$.data.accessToken}}
+
+{
+  "zone_name": "velachery, chennai",
+  "coordinates": [
+    [ 80.21857707692828, 12.985741683726062],
+    [80.21193873479763, 12.985252288525373],
+    [ 80.21002681219898, 12.97838854570358],
+    [80.21113479450264, 12.972210293121435],
+    [80.21636798216309, 12.968091341679283],
+    [80.2210978734617, 12.96779712546865],
+    [80.22743267711814, 12.979663284757677],
+    [80.21857707692828, 12.985741683726062]
+  ]
+}
+
+### 3) Get All Operational Zones
+GET {{baseUrl}}/api/admin/operational-zones
+Authorization: Bearer {{adminLogin.response.body.$.data.accessToken}}
+
+### 4) Update Operational Zone
+PUT {{baseUrl}}/api/admin/operational-zones/{{zoneId}}
+Content-Type: application/json
+Authorization: Bearer {{adminLogin.response.body.$.data.accessToken}}
+
+{
+  "zone_name": "Chennai Central Zone Updated",
+  "coordinates": [
+    [80.2350, 13.0450],
+    [80.2950, 13.0450],
+    [80.2950, 13.0950],
+    [80.2350, 13.0950],
+    [80.2350, 13.0450]
+  ]
+}
+
+### 5) Toggle Operational Zone Status (Deactivate)
+PATCH {{baseUrl}}/api/admin/operational-zones/{{zoneId}}/status
+Content-Type: application/json
+Authorization: Bearer {{adminLogin.response.body.$.data.accessToken}}
+
+{
+  "is_active": false
+}
+
+### 6) Toggle Operational Zone Status (Activate)
+PATCH {{baseUrl}}/api/admin/operational-zones/69ccd238a03f3e28b3347ab8/status
+Content-Type: application/json
+Authorization: Bearer {{adminLogin.response.body.$.data.accessToken}}
+
+{
+  "is_active": true
+}
+

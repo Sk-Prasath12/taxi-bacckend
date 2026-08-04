@@ -1,0 +1,96 @@
+@baseUrl = http://localhost:3000
+@customerEmail = customer02@yopmail.com
+@customerPassword = ashwin123
+@driverEmail = driver01@yopmail.com
+@driverPassword = Driver@123
+@rideId = REPLACE_WITH_RIDE_ID
+@ticketId = REPLACE_WITH_TICKET_ID
+
+### 1) Customer Login
+# @name customerLogin
+POST {{baseUrl}}/api/customers/login
+Content-Type: application/json
+
+{
+  "email": "customer01@yopmail.com",
+  "password": "ashwin123"
+}
+
+### 2) Driver Login
+# @name driverLogin
+POST {{baseUrl}}/api/drivers/login
+Content-Type: application/json
+
+{
+  "email": "{{driverEmail}}",
+  "password": "{{driverPassword}}"
+}
+
+### 3) Create General Ticket (Customer)
+# @name createCustomerTicket
+POST {{baseUrl}}/api/support/tickets
+Content-Type: application/json
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+{
+  "subject": "App issue while booking",
+  "description": "I am seeing a delay on ride confirmation.",
+  "category": "TECHNICAL"
+}
+
+### 4) Create Ride Ticket (Customer)
+POST {{baseUrl}}/api/support/tickets
+Content-Type: application/json
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+{
+  "subject": "Fare clarification needed",
+  "description": "Please explain the final fare breakup.",
+  "category": "RIDE",
+  "ride_id": "{{rideId}}"
+}
+
+### 5) Create Ride Ticket (Driver)
+# @name createDriverTicket
+POST {{baseUrl}}/api/support/tickets
+Content-Type: application/json
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+{
+  "subject": "Payment not reflected",
+  "description": "Wallet update seems delayed for a completed ride.",
+  "category": "PAYMENT",
+  "ride_id": "{{rideId}}"
+}
+
+### 6) Get My Tickets (Customer)
+GET {{baseUrl}}/api/support/tickets
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+### 7) Get My Tickets (Driver)
+GET {{baseUrl}}/api/support/tickets
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### 8) Get Ticket By Id (Customer)
+GET {{baseUrl}}/api/support/tickets/69c2378b322c66b16c575e20
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+### 9) Reply To Ticket (Customer)
+POST {{baseUrl}}/api/support/tickets/69c2378b322c66b16c575e20/reply
+Content-Type: application/json
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+{
+  "message": "Sharing additional details from my side."
+}
+
+### 10) Reply To Ticket (Driver)
+POST {{baseUrl}}/api/support/tickets/{{ticketId}}/reply
+Content-Type: application/json
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+{
+  "message": "Please check this ride once from admin panel."
+}
+
+

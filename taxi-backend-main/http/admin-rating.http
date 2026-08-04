@@ -1,0 +1,27 @@
+@baseUrl = http://localhost:3000
+@adminEmail = suadmintaxi@gmail.com
+@adminPassword = Admin@123
+
+### 1) Admin Login
+# @name adminLogin
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{adminEmail}}",
+  "password": "{{adminPassword}}"
+}
+
+### 2) Get All Ratings
+GET {{baseUrl}}/api/admin/ratings
+Authorization: Bearer {{adminLogin.response.body.$.data.accessToken}}
+
+### 3) Filter Ratings By Target Role
+GET {{baseUrl}}/api/admin/ratings?role=DRIVER
+Authorization: Bearer {{adminLogin.response.body.$.data.accessToken}}
+
+### 4) Filter Ratings By Score
+GET {{baseUrl}}/api/admin/ratings?rating=3
+Authorization: Bearer {{adminLogin.response.body.$.data.accessToken}}
+
+

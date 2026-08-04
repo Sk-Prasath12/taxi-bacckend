@@ -1,0 +1,142 @@
+@baseUrl = http://localhost:3000
+@driverEmail = Sridharshini@yopmail.com
+@driverPassword = sri@123456
+@driverOtp = 990698
+@rideId = REPLACE_WITH_RIDE_ID_FROM_RIDE_HTTP
+@customerToken = REPLACE_CUSTOMER_TOKEN_FROM_RIDE_HTTP
+@rideOtp = REPLACE_WITH_RIDE_OTP_FROM_CUSTOMER_CONFIRM_RESPONSE
+@newDriverEmail = newdriver01@yopmail.com
+@newDriverPassword = Driver@12345
+
+### Health
+GET {{baseUrl}}/api/v1/health
+
+###register driver
+POST {{baseUrl}}/api/drivers/register/email
+Content-Type: application/json
+
+{
+  "email": "{{driverEmail}}"
+}
+
+###register driver verify otp
+POST {{baseUrl}}/api/drivers/register/verify-otp
+Content-Type: application/json
+
+{
+  "email": "{{driverEmail}}",
+  "otp": "{{driverOtp}}"
+}
+
+###register driver set password
+POST {{baseUrl}}/api/drivers/register/set-password
+Content-Type: application/json
+
+{
+  "email": "{{driverEmail}}",
+  "password": "{{driverPassword}}"
+}
+
+### 1) Driver Login (START HERE)
+# Use existing driver credentials above.
+# @name driverLogin
+POST {{baseUrl}}/api/drivers/login
+Content-Type: application/json
+
+{
+  "email": "{{driverEmail}}",
+  "password": "{{driverPassword}}"
+}
+
+### 2) Incoming Rides (only SEARCHING_DRIVER rides)
+# Requires driver: is_driver_verified=true AND driver_verification_status=APPROVED (admin final approval).
+# If not verified: HTTP 403 — "You are not verified please verify first"
+GET {{baseUrl}}/api/drivers/rides/incoming
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### 3) Driver Wallet
+GET {{baseUrl}}/api/drivers/wallet
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### 4) Driver Cash Earnings (Driver Due for CASH rides)
+GET {{baseUrl}}/api/drivers/earnings/cash
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### 5) Driver Total Earnings (ONLINE wallet + CASH due)
+GET {{baseUrl}}/api/drivers/earnings/total
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### 7) Driver Ride History (includes customer + pickup/drop)
+GET {{baseUrl}}/api/drivers/rides/history
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### 8) Accept Ride
+# Same verification rule as incoming rides (403 if not verified).
+# Use ride id from ride.http requestRide response.
+POST {{baseUrl}}/api/drivers/rides/{{rideId}}/accept
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### 9) Mark Arrived At Pickup
+POST {{baseUrl}}/api/drivers/rides/{{rideId}}/arrived
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### 10) Verify Ride OTP (starts ride)
+POST {{baseUrl}}/api/drivers/rides/{{rideId}}/verify-otp
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "otp": {{rideOtp}}
+}
+
+### 11) Mark Picked Up
+POST {{baseUrl}}/api/drivers/rides/{{rideId}}/picked-up
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### 12) Mark In Transit
+POST {{baseUrl}}/api/drivers/rides/{{rideId}}/in-transit
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### 13) Mark Dropped (completes ride)
+# Server logs commission test: console "Commission Test:" + calculateCommission(ride.fare)
+POST {{baseUrl}}/api/drivers/rides/{{rideId}}/dropped
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### 14) Customer check assigned driver details (optional verification)
+# Use customer token from ride.http/customer-auth.http
+GET {{baseUrl}}/api/customers/rides/{{rideId}}/status
+Authorization: Bearer {{customerToken}}
+
+### QUICK SUCCESS CHECKLIST
+# 1) Run "1) Driver Login"
+# 2) Set @rideId from ride.http -> requestRide.response.body.ride_id
+# 3) Set @rideOtp from customer confirm response (otp field)
+# 4) Run 8 -> 13 in order
+
+### OPTIONAL: NEW DRIVER SETUP (RUN ONLY IF YOU NEED NEW DRIVER)
+### register driver
+POST {{baseUrl}}/api/drivers/register/email
+Content-Type: application/json
+
+{
+  "email": "{{newDriverEmail}}"
+}
+
+### register driver verify otp
+POST {{baseUrl}}/api/drivers/register/verify-otp
+Content-Type: application/json
+
+{
+  "email": "{{newDriverEmail}}",
+  "otp": "{{driverOtp}}"
+}
+
+### register driver set password
+POST {{baseUrl}}/api/drivers/register/set-password
+Content-Type: application/json
+
+{
+  "email": "{{newDriverEmail}}",
+  "password": "{{newDriverPassword}}"
+}
+
