@@ -1,5 +1,5 @@
 import { Types, isValidObjectId } from "mongoose";
-import { getIO } from "../../socket/socket";
+import { emitToRoom } from "../../socket/socket-emit.service";
 import { HttpError } from "../../utils/http-error";
 import { RideModel } from "../customer/ride/ride.model";
 import { UserRole } from "../users/users.types";
@@ -116,7 +116,7 @@ export const createTicket = async (user: AuthUser, payload: CreateTicketPayload)
     message: description,
   });
 
-  getIO().to(`${user.role.toLowerCase()}_${user.userId}`).emit("ticket_created", {
+  void emitToRoom(`${user.role.toLowerCase()}_${user.userId}`, "ticket_created", {
     ticket_id: String(ticket._id),
     status: ticket.status,
   });
@@ -189,7 +189,7 @@ export const replyToTicket = async (user: AuthUser, ticketId: string, message: s
     await ticket.save();
   }
 
-  getIO().to(`${ticket.role.toLowerCase()}_${String(ticket.user_id)}`).emit("ticket_replied", {
+  void emitToRoom(`${ticket.role.toLowerCase()}_${String(ticket.user_id)}`, "ticket_replied", {
     ticket_id: String(ticket._id),
     sender_role: senderRole,
   });
@@ -210,7 +210,7 @@ export const updateTicketStatus = async (ticketId: string, status: TicketStatus)
     throw new HttpError(404, "Ticket not found");
   }
 
-  getIO().to(`${ticket.role.toLowerCase()}_${String(ticket.user_id)}`).emit("ticket_replied", {
+  void emitToRoom(`${ticket.role.toLowerCase()}_${String(ticket.user_id)}`, "ticket_replied", {
     ticket_id: String(ticket._id),
     status: ticket.status,
   });

@@ -10,6 +10,9 @@ services:
       - .env.local
     environment:
       - MONGO_URI=mongodb://taxiadmin:taxi123@mongo:27017/taxi_app?authSource=admin
+      # Local Docker Mongo uses credentials in MONGO_URI only (ignore Atlas vars from .env.local).
+      - MONGO_USER=
+      - MONGO_PASSWORD=
     depends_on:
       - mongo
       - osrm

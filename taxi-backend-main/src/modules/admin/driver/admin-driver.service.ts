@@ -32,12 +32,20 @@ const getDriverOrThrow = async (driverId: string) => {
   return driver;
 };
 
-export const getAdminDrivers = async (pageInput?: unknown, limitInput?: unknown, searchInput?: unknown) => {
+export const getAdminDrivers = async (
+  pageInput?: unknown,
+  limitInput?: unknown,
+  searchInput?: unknown,
+  pendingApprovalOnly?: boolean,
+) => {
   const page = toPositiveInt(pageInput, 1);
-  const limit = Math.min(toPositiveInt(limitInput, 10), 100);
+  const limit = Math.min(toPositiveInt(limitInput, 10), 500);
   const search = typeof searchInput === "string" ? searchInput.trim() : "";
 
   const query: Record<string, unknown> = { role: "DRIVER" };
+  if (pendingApprovalOnly) {
+    query.driver_verification_status = { $ne: "APPROVED" };
+  }
   if (search) {
     query.$or = [{ email: { $regex: search, $options: "i" } }, { name: { $regex: search, $options: "i" } }];
   }

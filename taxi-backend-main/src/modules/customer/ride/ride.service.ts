@@ -6,9 +6,9 @@ import { HttpError } from "../../../utils/http-error";
 import { VehicleTypeModel } from "../../vehicle-type/vehicle-type.model";
 import { UserModel } from "../../users/users.model";
 import { RideDocument, RideModel } from "./ride.model";
-import { getIO, joinRideRoomForUser } from "../../../socket/socket";
+import { joinRideRoomForUser } from "../../../socket/socket";
+import { dispatchNewRideToNearbyDrivers, emitToRoom } from "../../../socket/socket-emit.service";
 import { validateRideLocations } from "../../operational-zone/operational-zone.service";
-import { emitNewRideToNearbyDrivers } from "../../../utils/nearby-drivers.util";
 import { emitCustomerAndRide } from "../../../utils/ride-socket-events.util";
 import { toFlexibleClientStatus } from "../../../utils/ride-emit.util";
 
@@ -23,7 +23,6 @@ const ACTIVE_RIDE_BLOCKED_STATUSES = [
   "IN_TRANSIT",
 ] as const;
 const INACTIVE_RIDE_STATUSES = ["COMPLETED", "CANCELLED"] as const;
-const FALLBACK_DISTANCE_KM = 10;
 const FALLBACK_DURATION_MIN = 15;
 const OTP_MIN = 1000;
 const OTP_MAX = 9999;
@@ -71,15 +70,14 @@ const customerObjectId = (customerId: string): Types.ObjectId => {
   return new Types.ObjectId(customerId);
 };
 
-const emitRideCancelledEvents = (ride: RideDocument): void => {
-  const io = getIO();
+const emitRideCancelledEvents = async (ride: RideDocument): Promise<void> => {
   const rideId = ride.id;
-  io.to("drivers").emit("ride_cancelled", { ride_id: rideId, status: "CANCELLED" });
-  io.to(`ride_${rideId}`).emit("ride_status_update", {
+  await emitToRoom("drivers", "ride_cancelled", { ride_id: rideId, status: "CANCELLED" });
+  await emitToRoom(`ride_${rideId}`, "ride_status_update", {
     ride_id: rideId,
     status: "CANCELLED",
   });
-  io.to(`customer_${String(ride.customer_id)}`).emit("ride_status_update", {
+  await emitToRoom(`customer_${String(ride.customer_id)}`, "ride_status_update", {
     ride_id: rideId,
     status: "CANCELLED",
   });
@@ -96,7 +94,7 @@ const cancelAllActiveRidesForCustomer = async (customerId: string): Promise<stri
   for (const ride of rides) {
     ride.status = "CANCELLED";
     await ride.save();
-    emitRideCancelledEvents(ride);
+    void emitRideCancelledEvents(ride);
     clearedIds.push(ride.id);
   }
   return clearedIds;
@@ -181,6 +179,27 @@ type OsrmRouteResponse = {
   }>;
 };
 
+const haversineDistanceKm = (
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number
+): number => {
+  const earthRadiusKm = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLng / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Number((earthRadiusKm * c).toFixed(2));
+};
+
+const estimateDurationMin = (distanceKm: number): number =>
+  Number(Math.max(5, (distanceKm / 30) * 60).toFixed(2));
+
 const getTripMetricsFromOsrm = async (
   pickupLat: number,
   pickupLng: number,
@@ -206,10 +225,17 @@ const getTripMetricsFromOsrm = async (
       duration_min: Number((route.duration / 60).toFixed(2)),
     };
   } catch (error) {
-    logger.error({ error }, "OSRM route fetch failed. Using fallback values");
+    const distance_km = Math.max(
+      haversineDistanceKm(pickupLat, pickupLng, dropLat, dropLng),
+      0.1
+    );
+    logger.warn(
+      { error, distance_km },
+      "OSRM route fetch failed. Using straight-line distance fallback"
+    );
     return {
-      distance_km: FALLBACK_DISTANCE_KM,
-      duration_min: FALLBACK_DURATION_MIN,
+      distance_km,
+      duration_min: estimateDurationMin(distance_km),
     };
   }
 };
@@ -341,7 +367,6 @@ export const confirmRide = async (
     "Ride OTP generated"
   );
 
-  const io = getIO();
   const newRidePayload = {
     ride_id: ride.id,
     pickup: ride.pickup,
@@ -352,7 +377,7 @@ export const confirmRide = async (
     status: "SEARCHING_DRIVER",
     vehicle_type_id: ride.vehicle_type_id ? String(ride.vehicle_type_id) : null,
   };
-  await emitNewRideToNearbyDrivers(io, ride.pickup, newRidePayload, {
+  await dispatchNewRideToNearbyDrivers(ride.pickup, newRidePayload, {
     vehicleTypeId: ride.vehicle_type_id ? String(ride.vehicle_type_id) : null,
     rejectedDriverIds: ride.rejected_driver_ids ?? [],
   });
@@ -422,16 +447,7 @@ export const cancelRide = async (customerIdInput: string | undefined, rideIdInpu
   ride.status = "CANCELLED";
   await ride.save();
 
-  const io = getIO();
-  io.to("drivers").emit("ride_cancelled", { ride_id: ride.id, status: "CANCELLED" });
-  io.to(`ride_${ride.id}`).emit("ride_status_update", {
-    ride_id: ride.id,
-    status: "CANCELLED",
-  });
-  io.to(`customer_${String(ride.customer_id)}`).emit("ride_status_update", {
-    ride_id: ride.id,
-    status: "CANCELLED",
-  });
+  await emitRideCancelledEvents(ride);
 
   return {
     message: "Ride cancelled successfully",

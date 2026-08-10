@@ -9,6 +9,7 @@ export type DriverDocumentStatus = (typeof DRIVER_DOCUMENT_STATUSES)[number];
 export type DriverDocumentEntity = {
   user_id: Types.ObjectId;
   document_type: DriverDocumentType;
+  document_slot?: string;
   file_url: string;
   file_key: string;
   status: DriverDocumentStatus;
@@ -30,6 +31,7 @@ const driverDocumentSchema = new Schema<DriverDocumentEntity>(
       enum: DRIVER_DOCUMENT_TYPES,
       required: true,
     },
+    document_slot: { type: String, trim: true, default: undefined },
     file_url: { type: String, required: true, trim: true },
     file_key: { type: String, required: true, trim: true },
     status: {
@@ -45,7 +47,7 @@ const driverDocumentSchema = new Schema<DriverDocumentEntity>(
   }
 );
 
-/** Non-unique: multiple uploads per type are allowed; reupload replaces a specific doc by id. */
 driverDocumentSchema.index({ user_id: 1, document_type: 1 });
+driverDocumentSchema.index({ user_id: 1, document_slot: 1 }, { unique: true, sparse: true });
 
 export const DriverDocumentModel = model<DriverDocumentEntity>("DriverDocument", driverDocumentSchema);

@@ -2,6 +2,8 @@ import type { Request, Response } from "express";
 
 import "../src/config/firebase";
 import app from "../src/app";
+import { ensureDefaultAdmin } from "../src/bootstrap/ensure-default-admin";
+import { ensureRideBootstrap } from "../src/bootstrap/ensure-ride-bootstrap";
 import { connectDatabase } from "../src/database/mongoose";
 
 declare global {
@@ -20,6 +22,8 @@ function ensureDatabase(): Promise<void> {
 export default async function handler(req: Request, res: Response) {
   try {
     await ensureDatabase();
+    await ensureDefaultAdmin();
+    await ensureRideBootstrap();
   } catch {
     res.status(503).json({
       success: false,

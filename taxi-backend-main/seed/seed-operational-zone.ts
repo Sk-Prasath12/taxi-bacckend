@@ -5,25 +5,27 @@ import { Seed } from "./seed.types";
 const ADMIN_EMAIL = "admin@taxigo.com";
 const CHENNAI_ZONE_NAME = "Chennai Metro";
 
-/** Covers Sholinganallur, Tambaram, Velachery, and surrounding areas. Format: [lng, lat]. */
+/** Greater Chennai + suburbs (Tambaram, OMR, Sriperumbudur, Red Hills). Format: [lng, lat]. */
 const CHENNAI_POLYGON: [number, number][] = [
-  [80.0, 12.85],
-  [80.35, 12.85],
-  [80.35, 13.05],
-  [80.0, 13.05],
-  [80.0, 12.85],
+  [79.85, 12.70],
+  [80.45, 12.70],
+  [80.45, 13.25],
+  [79.85, 13.25],
+  [79.85, 12.70],
 ];
 
 const run = async (): Promise<void> => {
+  const polygon = {
+    type: "Polygon" as const,
+    coordinates: [CHENNAI_POLYGON],
+  };
+
   const existing = await OperationalZoneModel.findOne({ zone_name: CHENNAI_ZONE_NAME });
   if (existing) {
-    if (!existing.is_active) {
-      existing.is_active = true;
-      await existing.save();
-      console.log("Chennai operational zone re-activated");
-    } else {
-      console.log("Chennai operational zone already exists");
-    }
+    existing.polygon = polygon;
+    existing.is_active = true;
+    await existing.save();
+    console.log("Chennai operational zone updated (expanded polygon, active)");
     return;
   }
 
@@ -35,10 +37,7 @@ const run = async (): Promise<void> => {
 
   await OperationalZoneModel.create({
     zone_name: CHENNAI_ZONE_NAME,
-    polygon: {
-      type: "Polygon",
-      coordinates: [CHENNAI_POLYGON],
-    },
+    polygon,
     is_active: true,
     created_by: admin._id,
   });

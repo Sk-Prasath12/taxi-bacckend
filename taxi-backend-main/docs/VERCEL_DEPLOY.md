@@ -81,3 +81,23 @@ For driver/customer live location and ride events, deploy the **same codebase** 
 - Point `SOCKET_BASE_URL` in both apps to that host
 
 REST on Vercel + Socket on Railway is possible but both apps must use the **same** `SOCKET_BASE_URL` as the socket server.
+
+## Share APK install links (any Android device)
+
+Use the **`apk-downloads`** folder in the repo root:
+
+```powershell
+cd "D:\Taxi Backend new\apk-downloads"
+.\deploy.ps1
+```
+
+Vercel prints a URL like `https://taxi-apk-downloads.vercel.app`. Share that link.
+
+| App | Download path |
+|-----|----------------|
+| Driver | `/downloads/taxi-driver.apk` |
+| Customer | `/downloads/taxi-customer.apk` |
+
+Rebuild APKs **after** the backend health check passes, so the baked-in API URL is correct.
+
+**Important:** `MONGO_URI` on Vercel must be **MongoDB Atlas** (cloud). Local `127.0.0.1` only works on your PC, not on Vercel.

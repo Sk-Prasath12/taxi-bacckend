@@ -15,6 +15,7 @@ const adminDriverRouter = Router();
 
 adminDriverRouter.post("/approve-by-email", adminApproveDriverByEmailController);
 adminDriverRouter.get("/verification", adminListDriversVerificationController);
+adminDriverRouter.get("/pending", adminListDriversVerificationController);
 adminDriverRouter.get("/verified", getVerifiedDriversController);
 adminDriverRouter.get("/", getAdminDriversController);
 adminDriverRouter.patch("/:id/approve", adminApproveDriverAccountController);

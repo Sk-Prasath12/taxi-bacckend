@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Taxi App — Install APK</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #0f172a;
+      --card: #1e293b;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #22c55e;
+      --accent2: #3b82f6;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: linear-gradient(160deg, #0f172a 0%, #1e3a5f 100%);
+      color: var(--text);
+      padding: 24px 16px 48px;
+    }
+    .wrap { max-width: 720px; margin: 0 auto; }
+    h1 { margin: 0 0 8px; font-size: 1.75rem; }
+    p.lead { color: var(--muted); margin: 0 0 28px; line-height: 1.5; }
+    .card {
+      background: var(--card);
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+    .card h2 { margin: 0 0 8px; font-size: 1.15rem; }
+    .card p { margin: 0 0 16px; color: var(--muted); font-size: 0.95rem; line-height: 1.45; }
+    a.btn {
+      display: inline-block;
+      padding: 12px 20px;
+      border-radius: 10px;
+      color: #fff;
+      text-decoration: none;
+      font-weight: 600;
+    }
+    a.driver { background: var(--accent); }
+    a.customer { background: var(--accent2); }
+    .steps { padding-left: 20px; color: var(--muted); line-height: 1.6; }
+    .status {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      background: #0f172a;
+      border: 1px solid #334155;
+    }
+    .ok { color: #4ade80; }
+    .bad { color: #f87171; }
+    code { background: #0f172a; padding: 2px 6px; border-radius: 4px; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Taxi App — Test APK downloads</h1>
+    <p class="lead">
+      Install on any Android phone (mobile data or Wi‑Fi). Both apps connect to the same backend API.
+    </p>
+
+    <div class="card">
+      <h2>Driver App</h2>
+      <p>Register as a driver, upload documents, wait for admin approval, then accept rides.</p>
+      <a class="btn driver" href="/downloads/taxi-driver.apk" download="taxi-driver.apk">Download Driver APK</a>
+    </div>
+
+    <div class="card">
+      <h2>Customer App</h2>
+      <p>Register with email OTP, set password, book rides.</p>
+      <a class="btn customer" href="/downloads/taxi-customer.apk" download="taxi-customer.apk">Download Customer APK</a>
+    </div>
+
+    <div class="card">
+      <h2>Install steps (Android)</h2>
+      <ol class="steps">
+        <li>Open the download link in Chrome on the phone.</li>
+        <li>If blocked, allow “Install unknown apps” for Chrome.</li>
+        <li>Install the APK, open the app, register or log in.</li>
+        <li>Use a real email — OTP is sent for customer registration.</li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <h2>Backend status</h2>
+      <p>API: <code id="api-url">https://taxi-bacckend.vercel.app/api/v1/health</code></p>
+      <div class="status" id="health-status">Checking backend…</div>
+    </div>
+  </div>
+
+  <script>
+    (async () => {
+      const el = document.getElementById("health-status");
+      const url = document.getElementById("api-url").textContent;
+      try {
+        const res = await fetch(url, { cache: "no-store" });
+        const text = await res.text();
+        if (res.ok && text.includes("Service healthy")) {
+          el.innerHTML = '<span class="ok">Backend is online — register/login should work.</span>';
+        } else {
+          el.innerHTML = '<span class="bad">Backend returned ' + res.status + '. Fix Vercel deploy before testing on phones.</span>';
+        }
+      } catch (e) {
+        el.innerHTML = '<span class="bad">Cannot reach backend. Deploy API on Vercel and disable Deployment Protection.</span>';
+      }
+    })();
+  </script>
+</body>
+</html>

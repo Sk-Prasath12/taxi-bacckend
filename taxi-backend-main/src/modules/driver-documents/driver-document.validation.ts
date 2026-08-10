@@ -13,6 +13,7 @@ export const driverUploadDocumentSchema = z.object({
     document_type: z.enum(["IDENTITY", "VEHICLE", "BANK", "PERSONAL"], {
       errorMap: () => ({ message: "Invalid or missing document_type query param" }),
     }),
+    document_slot: z.string().trim().min(1).max(64).optional(),
   }),
 });
 

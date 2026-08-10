@@ -26,9 +26,15 @@ ratingRouter.get(
   getMyRatingSummaryController
 );
 
+/** Mounted at `/api/admin` — do NOT use router-level auth at app root (that blocks GET /). */
 const adminRatingRouter = Router();
-adminRatingRouter.use(requireAuth, requireRole(["ADMIN"]));
-adminRatingRouter.get("/api/admin/ratings", validate(adminRatingsQuerySchema), getAdminRatingsController);
+adminRatingRouter.get(
+  "/ratings",
+  requireAuth,
+  requireRole(["ADMIN"]),
+  validate(adminRatingsQuerySchema),
+  getAdminRatingsController
+);
 
 export { ratingRouter, adminRatingRouter };
 

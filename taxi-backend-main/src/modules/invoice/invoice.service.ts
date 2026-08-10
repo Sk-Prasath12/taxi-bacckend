@@ -1,5 +1,5 @@
 import { Types } from "mongoose";
-import { getIO } from "../../socket/socket";
+import { emitToRoom } from "../../socket/socket-emit.service";
 import { calculateCommission } from "../common/commission.service";
 import { RideDocument, RideModel } from "../customer/ride/ride.model";
 import { HttpError } from "../../utils/http-error";
@@ -58,9 +58,8 @@ export const generateInvoice = async (rideInput: RideDocument) => {
       payment_status: paymentStatus,
     });
 
-    const io = getIO();
-    io.to(`customer_${String(ride.customer_id)}`).emit("invoice_generated", toInvoiceResponse(invoice));
-    io.to(`driver_${String(ride.driver_id)}`).emit("invoice_generated", toInvoiceResponse(invoice));
+    await emitToRoom(`customer_${String(ride.customer_id)}`, "invoice_generated", toInvoiceResponse(invoice));
+    await emitToRoom(`driver_${String(ride.driver_id)}`, "invoice_generated", toInvoiceResponse(invoice));
 
     return toInvoiceResponse(invoice);
   } catch (error: any) {
@@ -86,9 +85,8 @@ export const updateInvoicePaymentStatusToSuccess = async (rideId: Types.ObjectId
     return null;
   }
 
-  const io = getIO();
-  io.to(`customer_${String(updated.customer_id)}`).emit("invoice_updated", toInvoiceResponse(updated));
-  io.to(`driver_${String(updated.driver_id)}`).emit("invoice_updated", toInvoiceResponse(updated));
+  await emitToRoom(`customer_${String(updated.customer_id)}`, "invoice_updated", toInvoiceResponse(updated));
+  await emitToRoom(`driver_${String(updated.driver_id)}`, "invoice_updated", toInvoiceResponse(updated));
 
   return toInvoiceResponse(updated);
 };

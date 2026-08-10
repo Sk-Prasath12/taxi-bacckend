@@ -1,5 +1,5 @@
 import { Types } from "mongoose";
-import { getIO } from "../../socket/socket";
+import { emitToRoom } from "../../socket/socket-emit.service";
 import { calculateCommission } from "../common/commission.service";
 import { RideDocument, RideModel } from "../customer/ride/ride.model";
 import { UserModel } from "../users/users.model";
@@ -33,7 +33,6 @@ export const processRidePayment = async (rideInput: RideDocument) => {
   }
 
   const { commission, driverAmount } = calculateCommission(ride.fare);
-  const io = getIO();
 
   if (ride.payment_mode === "ONLINE") {
     await WalletModel.findOneAndUpdate(
@@ -48,11 +47,11 @@ export const processRidePayment = async (rideInput: RideDocument) => {
       source: "ONLINE",
     });
 
-    io.to(`driver_${String(ride.driver_id)}`).emit("driver_wallet_updated", {
+    await emitToRoom(`driver_${String(ride.driver_id)}`, "driver_wallet_updated", {
       ride_id: String(ride.id),
       amount: driverAmount,
     });
-    io.to(`driver_${String(ride.driver_id)}`).emit("wallet_updated", {
+    await emitToRoom(`driver_${String(ride.driver_id)}`, "wallet_updated", {
       amount: driverAmount,
     });
     return;
@@ -70,7 +69,7 @@ export const processRidePayment = async (rideInput: RideDocument) => {
     source: "CASH",
   });
 
-  io.to(`driver_${String(ride.driver_id)}`).emit("driver_due_updated", {
+  await emitToRoom(`driver_${String(ride.driver_id)}`, "driver_due_updated", {
     ride_id: String(ride.id),
     due_amount: commission,
   });

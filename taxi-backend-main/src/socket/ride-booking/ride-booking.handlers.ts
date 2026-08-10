@@ -19,6 +19,7 @@ import {
 } from "./ride-booking.repository";
 import { assertRideTransition } from "./ride-booking.state";
 import { persistUserLocation } from "../../utils/driver-location-persist.util";
+import { UserModel } from "../../modules/users/users.model";
 import {
   DriverOnlinePayload,
   RideAcceptPayload,
@@ -147,6 +148,11 @@ export const registerRideBookingHandlers = (io: Server, socket: SocketWithIdenti
         updatedAt: Date.now(),
       });
       socket.join(roomDriver(driverId));
+
+      void UserModel.updateOne(
+        { _id: driverId, role: "DRIVER" },
+        { $set: { driver_status: "ONLINE" } }
+      );
 
       void persistUserLocation({
         userId: driverId,

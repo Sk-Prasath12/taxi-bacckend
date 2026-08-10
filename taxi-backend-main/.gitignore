@@ -29,3 +29,5 @@ docker-data
 
 # Coverage
 coverage/
+.vercel
+.env*

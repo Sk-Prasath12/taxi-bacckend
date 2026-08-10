@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import Razorpay from "razorpay";
 import { env } from "../../config/env";
-import { getIO } from "../../socket/socket";
+import { emitToRoom } from "../../socket/socket-emit.service";
 import { HttpError } from "../../utils/http-error";
 import { calculateCommission } from "../common/commission.service";
 import { RideDocument, RideModel } from "../customer/ride/ride.model";
@@ -52,7 +52,6 @@ const isOnlineRidePayable = (ride: {
 
 /** After Razorpay SUCCESS: credit driver wallet, complete ride, notify both apps. */
 const finalizeOnlinePaymentSuccess = async (ride: RideDocument) => {
-  const io = getIO();
   const customerId = String(ride.customer_id);
   const rideId = String(ride.id);
   const { commission, driverAmount } = calculateCommission(ride.fare);
@@ -109,8 +108,9 @@ const finalizeOnlinePaymentSuccess = async (ride: RideDocument) => {
 
   if (ride.driver_id) {
     const driverId = String(ride.driver_id);
-    io.to(`driver_${driverId}`).emit("payment_success", paymentPayload);
-    io.to(`driver_${driverId}`).emit("driver_wallet_updated", {
+    const driverRoom = `driver_${driverId}`;
+    await emitToRoom(driverRoom, "payment_success", paymentPayload);
+    await emitToRoom(driverRoom, "driver_wallet_updated", {
       ride_id: rideId,
       amount: driverAmount,
       wallet_balance: wallet?.balance ?? null,
@@ -118,7 +118,7 @@ const finalizeOnlinePaymentSuccess = async (ride: RideDocument) => {
       payment_mode: ride.payment_mode,
       driver_earnings: driverAmount,
     });
-    io.to(`driver_${driverId}`).emit("wallet_updated", {
+    await emitToRoom(driverRoom, "wallet_updated", {
       ride_id: rideId,
       amount: driverAmount,
       wallet_balance: wallet?.balance ?? null,
@@ -133,9 +133,9 @@ const finalizeOnlinePaymentSuccess = async (ride: RideDocument) => {
       ride_id: String(updatedInvoice.ride_id),
       payment_status: updatedInvoice.payment_status,
     };
-    io.to(`customer_${customerId}`).emit("invoice_updated", invoicePayload);
+    await emitToRoom(`customer_${customerId}`, "invoice_updated", invoicePayload);
     if (ride.driver_id) {
-      io.to(`driver_${String(ride.driver_id)}`).emit("invoice_updated", invoicePayload);
+      await emitToRoom(`driver_${String(ride.driver_id)}`, "invoice_updated", invoicePayload);
     }
   }
 
@@ -151,9 +151,9 @@ const finalizeOnlinePaymentSuccess = async (ride: RideDocument) => {
     emitCustomerAndRide(customerId, rideId, "ride_completed", completedPayload);
     emitRideStatusToParties(customerId, rideId, "COMPLETED", completedPayload);
     if (ride.driver_id) {
-      const driverId = String(ride.driver_id);
-      io.to(`driver_${driverId}`).emit("ride_completed", completedPayload);
-      io.to(`driver_${driverId}`).emit("ride_status_update", completedPayload);
+      const driverRoom = `driver_${String(ride.driver_id)}`;
+      await emitToRoom(driverRoom, "ride_completed", completedPayload);
+      await emitToRoom(driverRoom, "ride_status_update", completedPayload);
     }
   }
 

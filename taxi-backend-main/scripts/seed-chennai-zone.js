@@ -4,12 +4,13 @@ if (!admin) {
   quit(1);
 }
 
+/** Greater Chennai + suburbs. Format: [lng, lat]. */
 const ring = [
-  [80.0, 12.85],
-  [80.35, 12.85],
-  [80.35, 13.05],
-  [80.0, 13.05],
-  [80.0, 12.85],
+  [79.85, 12.70],
+  [80.45, 12.70],
+  [80.45, 13.25],
+  [79.85, 13.25],
+  [79.85, 12.70],
 ];
 
 const existing = db.operational_zones.findOne({ zone_name: "Chennai Metro" });

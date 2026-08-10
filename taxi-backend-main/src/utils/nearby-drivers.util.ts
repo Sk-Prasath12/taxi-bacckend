@@ -116,6 +116,29 @@ export const findNearbyEligibleDrivers = async (
     logger.warn({ error }, "Geo query for nearby drivers failed; using in-memory only");
   }
 
+  if (seen.size === 0) {
+    const onlineDrivers = await UserModel.find({
+      role: "DRIVER",
+      driver_status: "ONLINE",
+      is_blocked: { $ne: true },
+      is_driver_verified: true,
+      driver_verification_status: "APPROVED",
+    })
+      .select("_id driver_location")
+      .limit(20)
+      .lean();
+
+    for (const row of onlineDrivers) {
+      const driverId = String(row._id);
+      if (rejected.has(driverId) || busy.has(driverId) || seen.has(driverId)) continue;
+      const location = pointFromUserDoc(row);
+      if (!location) continue;
+      const dist = distanceMeters(pickup, location);
+      if (dist > maxRadiusMeters) continue;
+      seen.set(driverId, { driverId, location, source: "db" });
+    }
+  }
+
   return Array.from(seen.values()).sort(
     (a, b) => distanceMeters(pickup, a.location) - distanceMeters(pickup, b.location)
   );
@@ -164,9 +187,10 @@ export const emitNewRideToNearbyDrivers = async (
         pickup,
         rejected: normalizeRejected(options.rejectedDriverIds).length,
       },
-      "No nearby eligible drivers for ride dispatch"
+      "No nearby eligible drivers for ride dispatch — broadcasting to drivers room"
     );
-    return { targeted: 0, broadcastAll: false };
+    io.to("drivers").emit("new_ride", payload);
+    return { targeted: 0, broadcastAll: true };
   }
 
   for (const { driverId, location } of nearby) {

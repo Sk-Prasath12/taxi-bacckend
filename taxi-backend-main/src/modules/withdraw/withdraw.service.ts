@@ -1,5 +1,5 @@
 import { Types } from "mongoose";
-import { getIO } from "../../socket/socket";
+import { emitToRoom } from "../../socket/socket-emit.service";
 import { HttpError } from "../../utils/http-error";
 import { WalletModel } from "../finance/wallet.model";
 import { WithdrawModel } from "./withdraw.model";
@@ -37,8 +37,7 @@ export const withdrawAmount = async (driverId: string, amount: number) => {
     status: "SUCCESS",
   });
 
-  const io = getIO();
-  io.to(`driver_${driverId}`).emit("wallet_updated", {
+  await emitToRoom(`driver_${driverId}`, "wallet_updated", {
     withdrawn: amount,
   });
 

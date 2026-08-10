@@ -29,7 +29,17 @@ const envSchema = z.object({
   CORS_ORIGINS: z.string().optional(),
   /** Public HTTPS API root shown in logs/docs, e.g. https://api.example.com */
   PUBLIC_API_URL: z.string().optional(),
+  /**
+   * Long-running socket host (Railway/Render/VPS) for Vercel REST → socket bridge.
+   * Example: https://taxi-socket.railway.app
+   */
+  SOCKET_BRIDGE_URL: z.string().optional(),
+  /** Shared secret for POST /internal/socket-bridge/emit */
+  SOCKET_BRIDGE_SECRET: z.string().optional(),
   MONGO_URI: z.string().min(1),
+  /** Optional: avoid URL-encoding issues with special chars in Atlas passwords on Vercel. */
+  MONGO_USER: z.string().optional(),
+  MONGO_PASSWORD: z.string().optional(),
   JWT_ACCESS_SECRET: z.string().min(16),
   JWT_REFRESH_SECRET: z.string().min(16),
   JWT_ACCESS_EXPIRES_IN: z.string().default("15m"),
@@ -65,3 +75,6 @@ const isTest = process.env.NODE_ENV === "test";
 export const MONGO_URI = isTest
   ? "mongodb://127.0.0.1:27017/taxi_app"
   : env.MONGO_URI;
+
+export const MONGO_USER = isTest ? undefined : env.MONGO_USER;
+export const MONGO_PASSWORD = isTest ? undefined : env.MONGO_PASSWORD;

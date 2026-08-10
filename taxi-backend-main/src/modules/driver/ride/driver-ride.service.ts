@@ -7,10 +7,14 @@ import { sendPushNotification } from "../../../services/notification.service";
 import { HttpError } from "../../../utils/http-error";
 import { RideDocument, RideModel, RideStatus } from "../../customer/ride/ride.model";
 import { UserModel } from "../../users/users.model";
-import { emitToCustomer, emitToRide, getIO, joinRideRoomForUser } from "../../../socket/socket";
+import { emitToCustomer, emitToRide, joinRideRoomForUser } from "../../../socket/socket";
 import { VehicleTypeModel } from "../../vehicle-type/vehicle-type.model";
 import { buildRideEmitPayload, toFlexibleClientStatus } from "../../../utils/ride-emit.util";
-import { emitNewRideToNearbyDrivers, emitRideUnavailableToDrivers, getDriverLocationForMatching, distanceMeters } from "../../../utils/nearby-drivers.util";
+import {
+  dispatchNewRideToNearbyDrivers,
+  dispatchRideUnavailableToDrivers,
+} from "../../../socket/socket-emit.service";
+import { getDriverLocationForMatching, distanceMeters } from "../../../utils/nearby-drivers.util";
 import { persistUserLocation } from "../../../utils/driver-location-persist.util";
 import { acceptRideAtomically } from "../../../socket/ride-booking/ride-booking.repository";
 import { upsertOnlineDriver } from "../../../socket/ride-booking/ride-booking.store";
@@ -369,20 +373,23 @@ export const rejectIncomingRide = async (driverIdInput: string | undefined, ride
   }
 
   try {
-    const io = getIO();
-    await emitNewRideToNearbyDrivers(io, ride.pickup, {
-      ride_id: ride.id,
-      pickup: ride.pickup,
-      drop: ride.drop,
-      fare: ride.fare,
-      distance_km: ride.distance_km,
-      payment_mode: ride.payment_mode ?? "CASH",
-      status: "SEARCHING_DRIVER",
-      vehicle_type_id: ride.vehicle_type_id ? String(ride.vehicle_type_id) : null,
-    }, {
-      rejectedDriverIds: ride.rejected_driver_ids ?? [],
-      vehicleTypeId: ride.vehicle_type_id ? String(ride.vehicle_type_id) : null,
-    });
+    await dispatchNewRideToNearbyDrivers(
+      ride.pickup,
+      {
+        ride_id: ride.id,
+        pickup: ride.pickup,
+        drop: ride.drop,
+        fare: ride.fare,
+        distance_km: ride.distance_km,
+        payment_mode: ride.payment_mode ?? "CASH",
+        status: "SEARCHING_DRIVER",
+        vehicle_type_id: ride.vehicle_type_id ? String(ride.vehicle_type_id) : null,
+      },
+      {
+        rejectedDriverIds: ride.rejected_driver_ids ?? [],
+        vehicleTypeId: ride.vehicle_type_id ? String(ride.vehicle_type_id) : null,
+      }
+    );
   } catch (error) {
     logger.warn({ error, ride_id: ride.id }, "Re-broadcast after reject failed");
   }
@@ -483,8 +490,7 @@ export const acceptIncomingRide = async (driverIdInput: string | undefined, ride
   const ride = await acceptRideAtomically(rideId, driver.id);
   await UserModel.updateOne({ _id: driver._id }, { $set: { driver_status: "BUSY" } });
 
-  const io = getIO();
-  emitRideUnavailableToDrivers(io, ride.id);
+  await dispatchRideUnavailableToDrivers(ride.id);
   const customerId = String(ride.customer_id);
   const ridePayload = await buildRideEmitPayload(ride);
   console.log("Emitting to customer:", customerId);

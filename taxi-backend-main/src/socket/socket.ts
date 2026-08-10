@@ -10,6 +10,7 @@ import { UserModel } from "../modules/users/users.model";
 import { verifyAccessToken } from "../utils/jwt.util";
 import { registerRideBookingHandlers } from "./ride-booking/ride-booking.handlers";
 import { persistUserLocation } from "../utils/driver-location-persist.util";
+import { forwardSocketBridge } from "./socket-bridge.client";
 
 type SocketRole = "customer" | "driver";
 
@@ -660,6 +661,8 @@ export const initializeSocketServer = (httpServer: HttpServer) => {
   return ioInstance;
 };
 
+export const getIoSafe = (): typeof ioInstance => ioInstance ?? null;
+
 export const getIo = () => {
   if (!ioInstance) {
     throw new Error("Socket.io not initialized");
@@ -671,20 +674,16 @@ export const getIO = () => getIo();
 export const io = getIO;
 
 export const emitToDrivers = (event: string, payload: Record<string, unknown>) => {
-  const io = getIO();
-  const roomSize = io.sockets.adapter.rooms.get("drivers")?.size ?? 0;
-  if (roomSize === 0) {
-    logger.warn({ event }, "No connected driver sockets for drivers room");
+  if (ioInstance) {
+    const roomSize = ioInstance.sockets.adapter.rooms.get("drivers")?.size ?? 0;
+    if (roomSize === 0) {
+      logger.warn({ event }, "No connected driver sockets for drivers room");
+    }
+    ioInstance.to("drivers").emit(event, payload);
+    logger.info({ event, room: "drivers", payload }, "Emitted event to drivers room");
+    return;
   }
-  io.to("drivers").emit(event, payload);
-  logger.info(
-    {
-      event,
-      room: "drivers",
-      payload,
-    },
-    "Emitted event to drivers room"
-  );
+  void forwardSocketBridge({ type: "room", room: "drivers", event, payload });
 };
 
 const CUSTOMER_EVENT_ALIASES: Record<string, string> = {
@@ -701,11 +700,15 @@ export const emitToCustomer = (
   event: string,
   payload: Record<string, unknown>
 ) => {
+  const room = `customer_${customerId}`;
   if (!ioInstance) {
-    logger.warn({ customerId, event }, "Socket server not initialized while emitting to customer");
+    void forwardSocketBridge({ type: "room", room, event, payload });
+    const alias = CUSTOMER_EVENT_ALIASES[event];
+    if (alias) {
+      void forwardSocketBridge({ type: "room", room, event: alias, payload });
+    }
     return;
   }
-  const room = `customer_${customerId}`;
   const roomSize = ioInstance.sockets.adapter.rooms.get(room)?.size ?? 0;
   if (roomSize === 0) {
     logger.warn({ customerId, event }, "No connected customer sockets in room");
@@ -720,11 +723,11 @@ export const emitToCustomer = (
 };
 
 export const emitToRide = (rideId: string, event: string, payload: Record<string, unknown>) => {
+  const rooms = getRideRooms(rideId);
   if (!ioInstance) {
-    logger.warn({ rideId, event }, "Socket server not initialized while emitting to ride room");
+    void forwardSocketBridge({ type: "rooms", rooms, event, payload });
     return;
   }
-  const rooms = getRideRooms(rideId);
   const totalSize = rooms.reduce(
     (acc, room) => acc + (ioInstance?.sockets.adapter.rooms.get(room)?.size ?? 0),
     0

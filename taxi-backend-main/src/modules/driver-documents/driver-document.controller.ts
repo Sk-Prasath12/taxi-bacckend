@@ -71,11 +71,13 @@ export const driverUploadDocumentController = async (
     }
 
     const documentType = req.query.document_type as DriverDocumentType;
+    const documentSlot =
+      typeof req.query.document_slot === "string" ? req.query.document_slot : undefined;
     const data = await uploadDocument(req.authUser.userId, documentType, {
       buffer: uploaded.buffer,
       mimetype: uploaded.mimetype,
       originalname: uploaded.originalname,
-    });
+    }, documentSlot);
 
     return res.status(201).json(successResponse("Document uploaded successfully", data));
   } catch (error) {

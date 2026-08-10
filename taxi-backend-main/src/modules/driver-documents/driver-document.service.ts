@@ -4,7 +4,7 @@ import { HttpError } from "../../utils/http-error";
 import type { Readable } from "stream";
 import { deleteFile, getObjectForDownload, uploadFile, type UploadableFile } from "../../utils/s3";
 import { DriverDocumentModel, type DriverDocumentType } from "./driver-document.model";
-import { getIo } from "../../socket/socket";
+import { emitToRoom } from "../../socket/socket-emit.service";
 import { sendPushNotification } from "../../services/notification.service";
 import { ensureDriverReadyForOnline } from "../driver-profile/driver-profile.service";
 
@@ -21,6 +21,7 @@ export type DriverDocumentView = {
   id: string;
   user_id: string;
   document_type: DriverDocumentType;
+  document_slot: string | null;
   file_url: string;
   file_key: string;
   status: string;
@@ -31,6 +32,7 @@ function mapDocument(doc: {
   _id: Types.ObjectId;
   user_id: Types.ObjectId;
   document_type: DriverDocumentType;
+  document_slot?: string | null;
   file_url: string;
   file_key: string;
   status: string;
@@ -40,6 +42,7 @@ function mapDocument(doc: {
     id: String(doc._id),
     user_id: String(doc.user_id),
     document_type: doc.document_type,
+    document_slot: doc.document_slot ?? null,
     file_url: doc.file_url,
     file_key: doc.file_key,
     status: doc.status,
@@ -50,18 +53,25 @@ function mapDocument(doc: {
 export async function uploadDocument(
   userId: string,
   documentType: DriverDocumentType,
-  file: UploadableFile
+  file: UploadableFile,
+  documentSlot?: string
 ): Promise<DriverDocumentView> {
   const user = await UserModel.findById(userId);
   assertDriver(user);
 
-  const existing = await DriverDocumentModel.findOne({
+  const slot = documentSlot?.trim() || undefined;
+  const existingQuery: Record<string, unknown> = {
     user_id: new Types.ObjectId(userId),
-    document_type: documentType,
-    status: { $in: ["PENDING", "APPROVED"] },
-  })
-    .sort({ createdAt: -1 })
-    .exec();
+  };
+  if (slot) {
+    existingQuery.document_slot = slot;
+  } else {
+    existingQuery.document_type = documentType;
+    existingQuery.status = { $in: ["PENDING", "APPROVED"] };
+    existingQuery.$or = [{ document_slot: { $exists: false } }, { document_slot: null }, { document_slot: "" }];
+  }
+
+  const existing = await DriverDocumentModel.findOne(existingQuery).sort({ createdAt: -1 }).exec();
 
   if (existing?.status === "APPROVED") {
     return mapDocument(existing.toObject());
@@ -84,6 +94,7 @@ export async function uploadDocument(
   const created = await DriverDocumentModel.create({
     user_id: new Types.ObjectId(userId),
     document_type: documentType,
+    document_slot: slot,
     file_url: uploaded.file_url,
     file_key: uploaded.file_key,
     status: "PENDING",
@@ -310,39 +321,26 @@ export async function adminUpdateDocumentStatus(
   await doc.save();
 
   const driver = await UserModel.findById(doc.user_id);
-  if (driver && driver.role === "DRIVER") {
-    if (status === "REJECTED") {
-      driver.is_driver_verified = false;
-      driver.driver_verification_status = "REJECTED";
-      await driver.save();
-      emitDriverVerificationEvent(String(driver._id), "admin_driver_rejected", {
-        message: reason?.trim() || "A document was rejected. Please re-upload and wait for admin approval.",
-        driver_verification_status: "REJECTED",
-        is_driver_verified: false,
-        document_type: doc.document_type,
-      });
-    } else {
-      driver.is_driver_verified = false;
-      driver.driver_verification_status = "PENDING";
-      await driver.save();
-    }
+  if (driver && driver.role === "DRIVER" && status === "REJECTED") {
+    await emitDriverVerificationEvent(String(driver._id), "admin_document_rejected", {
+      message: reason?.trim() || "A document was rejected. Please re-upload from the Documents screen.",
+      driver_verification_status: driver.driver_verification_status ?? "PENDING",
+      is_driver_verified: driver.is_driver_verified === true,
+      document_type: doc.document_type,
+      document_slot: doc.document_slot ?? null,
+    });
   }
 
   return mapDocument(doc.toObject());
 }
 
-function emitDriverVerificationEvent(
+async function emitDriverVerificationEvent(
   driverId: string,
   event: string,
   payload: Record<string, unknown>
-): void {
-  try {
-    const io = getIo();
-    io.to(`driver_${driverId}`).emit(event, payload);
-    io.to(`driver_${driverId}`).emit("driver:verification:update", payload);
-  } catch {
-    // Socket may be unavailable during tests or startup
-  }
+): Promise<void> {
+  await emitToRoom(`driver_${driverId}`, event, payload);
+  await emitToRoom(`driver_${driverId}`, "driver:verification:update", payload);
 }
 
 async function notifyDriverVerificationApproved(driver: {
@@ -352,7 +350,7 @@ async function notifyDriverVerificationApproved(driver: {
   const driverId = String(driver._id);
   const message =
     "Your account has been verified successfully. You can now go online and accept rides.";
-  emitDriverVerificationEvent(driverId, "admin_driver_approved", {
+  await emitDriverVerificationEvent(driverId, "admin_driver_approved", {
     type: "driver_verification_approved",
     message,
     driver_verification_status: "APPROVED",
@@ -434,7 +432,7 @@ export async function submitDocumentsForAdminReview(userId: string): Promise<{
       ? "Account submitted for admin approval (documents optional)"
       : "Documents submitted for admin review";
 
-  emitDriverVerificationEvent(String(user._id), "driver_documents_submitted", {
+  await emitDriverVerificationEvent(String(user._id), "driver_documents_submitted", {
     message,
     driver_verification_status: "PENDING",
     is_driver_verified: false,

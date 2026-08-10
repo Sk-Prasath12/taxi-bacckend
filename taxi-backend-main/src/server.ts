@@ -1,5 +1,6 @@
 import http from "http";
 import app from "./app";
+import { ensureDefaultAdmin } from "./bootstrap/ensure-default-admin";
 import "./config/firebase";
 import { env } from "./config/env";
 import { logger } from "./config/logger";
@@ -11,6 +12,7 @@ import { initializeSocketServer } from "./socket/socket";
 
 const startServer = async () => {
   await connectDatabase();
+  await ensureDefaultAdmin();
   const indexDiff = await DriverDocumentModel.syncIndexes();
   if (indexDiff.length > 0) {
     logger.info({ indexDiff }, "driver_documents indexes synced");

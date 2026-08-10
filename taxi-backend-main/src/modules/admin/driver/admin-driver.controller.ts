@@ -43,8 +43,10 @@ export const adminApproveDriverByEmailController = async (
 
 export const getAdminDriversController = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { page, limit, search } = req.query;
-    const data = await getAdminDrivers(page, limit, search);
+    const { page, limit, search, pending_approval } = req.query;
+    const pendingApprovalOnly =
+      pending_approval === "1" || pending_approval === "true" || pending_approval === "yes";
+    const data = await getAdminDrivers(page, limit, search, pendingApprovalOnly);
     return res.status(200).json(data);
   } catch (error) {
     return next(error);

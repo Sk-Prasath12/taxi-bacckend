@@ -24,6 +24,7 @@ import {
 } from "./modules/driver-documents/driver-document.routes";
 import driverProfileRouter from "./modules/driver-profile/driver-profile.routes";
 import { globalErrorHandler, notFoundHandler } from "./middlewares/error.middleware";
+import socketBridgeRouter from "./modules/internal/socket-bridge.routes";
 
 
 export const app = express();
@@ -42,8 +43,25 @@ app.use(express.json());
 app.use(pinoHttp({ logger }));
 
 app.get("/api/v1/health", (_req, res) => {
-  return res.status(200).json(successResponse("Service healthy"));
+  return res.status(200).json(
+    successResponse("Service healthy", {
+      socket: env.SOCKET_BRIDGE_URL ? "bridge" : "local_or_polling",
+    })
+  );
 });
+
+/** Public root — Vercel rewrite sends `/` here; must not require auth. */
+app.get(["/", "/api"], (_req, res) => {
+  return res.status(200).json(
+    successResponse("Taxi API is online", {
+      health: "/api/v1/health",
+      vehicles: "/api/vehicle-types/active",
+      docs: "Use /api/customers/* and /api/drivers/* endpoints",
+    })
+  );
+});
+
+app.use("/internal/socket-bridge", socketBridgeRouter);
 
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/admin", adminRouter);
@@ -66,7 +84,7 @@ app.use("/api/driver-app", driverAppRouter);
 app.use("/api/support", supportRouter);
 app.use("/api/admin", adminSupportRouter);
 app.use(ratingRouter);
-app.use(adminRatingRouter);
+app.use("/api/admin", adminRatingRouter);
 
 app.use(notFoundHandler);
 app.use(globalErrorHandler);
