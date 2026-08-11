@@ -13,7 +13,7 @@ export type NearbyDispatchOptions = {
   rejectedDriverIds?: (string | Types.ObjectId)[];
 };
 
-const DEFAULT_RADIUS_M = 25000;
+const DEFAULT_RADIUS_M = 5000;
 const LOCATION_MAX_AGE_MS = 15 * 60 * 1000;
 const TERMINAL_RIDE_STATUSES = ["COMPLETED", "CANCELLED"] as const;
 
@@ -186,11 +186,11 @@ export const emitNewRideToNearbyDrivers = async (
         ride_id: payload.ride_id,
         pickup,
         rejected: normalizeRejected(options.rejectedDriverIds).length,
+        maxRadiusMeters: options.maxRadiusMeters ?? DEFAULT_RADIUS_M,
       },
-      "No nearby eligible drivers for ride dispatch — broadcasting to drivers room"
+      "No online drivers within 5 km of pickup — ride stays SEARCHING_DRIVER"
     );
-    io.to("drivers").emit("new_ride", payload);
-    return { targeted: 0, broadcastAll: true };
+    return { targeted: 0, broadcastAll: false };
   }
 
   for (const { driverId, location } of nearby) {

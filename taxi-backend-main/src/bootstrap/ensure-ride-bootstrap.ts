@@ -14,12 +14,13 @@ const CUSTOMER_VEHICLE_TYPES = [
 ] as const;
 
 const CHENNAI_ZONE_NAME = "Chennai Metro";
+// Chennai district box (lng, lat) — matches customer app ChennaiArea.
 const CHENNAI_POLYGON: [number, number][] = [
-  [79.85, 12.7],
-  [80.45, 12.7],
-  [80.45, 13.25],
-  [79.85, 13.25],
-  [79.85, 12.7],
+  [80.05, 12.83],
+  [80.35, 12.83],
+  [80.35, 13.26],
+  [80.05, 13.26],
+  [80.05, 12.83],
 ];
 
 const DUMMY_DRIVER_EMAIL = "dummy.driver@taxi.local";

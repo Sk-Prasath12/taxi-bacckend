@@ -446,7 +446,7 @@ export const getIncomingRides = async (
     return { rides: [] };
   }
 
-  const maxRadiusM = 25000;
+  const maxRadiusM = 5000;
   const rides = await RideModel.find({
     status: "SEARCHING_DRIVER",
     driver_id: null,
@@ -482,8 +482,8 @@ export const acceptIncomingRide = async (driverIdInput: string | undefined, ride
       lat: rideBefore.pickup.lat,
       lng: rideBefore.pickup.lng,
     });
-    if (dist > 25000) {
-      throw new HttpError(403, "This ride is outside your service area");
+    if (dist > 5000) {
+      throw new HttpError(403, "This ride is more than 5 km from your location");
     }
   }
 

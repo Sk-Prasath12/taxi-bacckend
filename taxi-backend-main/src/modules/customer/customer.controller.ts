@@ -72,7 +72,12 @@ export const customerLoginController = async (
     const { email, password } = req.body;
     const data = await loginCustomer(email, password);
 
-    return res.status(200).json(data);
+    return res.status(200).json({
+      success: true,
+      message: "Login successful",
+      ...data,
+      data,
+    });
   } catch (error) {
     return next(error);
   }
