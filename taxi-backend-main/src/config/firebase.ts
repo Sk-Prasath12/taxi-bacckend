@@ -2,10 +2,15 @@ import fs from "fs";
 import path from "path";
 import admin from "firebase-admin";
 
-const serviceAccountPath = path.resolve(process.cwd(), "src/config/firebase-service.json");
+const serviceAccountPath = [
+    path.resolve(process.cwd(), "src/config/firebase-service.json"),
+    path.resolve(process.cwd(), "taxi-backend-main/src/config/firebase-service.json"),
+  ].find((candidate) => fs.existsSync(candidate));
 
-if (!fs.existsSync(serviceAccountPath)) {
-  throw new Error("firebase-service.json not found at " + serviceAccountPath);
+if (!serviceAccountPath) {
+  throw new Error(
+    "firebase-service.json not found under src/config or taxi-backend-main/src/config",
+  );
 }
 
 const serviceAccount = JSON.parse(
