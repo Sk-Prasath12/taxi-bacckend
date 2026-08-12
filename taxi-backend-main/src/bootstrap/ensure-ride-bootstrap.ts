@@ -13,14 +13,14 @@ const CUSTOMER_VEHICLE_TYPES = [
   { name: "Big 7 Seater Car", per_km_rate: 40, max_passengers: 7 },
 ] as const;
 
-const CHENNAI_ZONE_NAME = "Chennai Metro";
-// Chennai district box (lng, lat) — matches customer app ChennaiArea.
+const CHENNAI_ZONE_NAME = "Tamil Nadu Service Area";
+// Tamil Nadu service box (lng, lat) — matches customer app service bounds.
 const CHENNAI_POLYGON: [number, number][] = [
-  [80.05, 12.83],
-  [80.35, 12.83],
-  [80.35, 13.26],
-  [80.05, 13.26],
-  [80.05, 12.83],
+  [76.0, 8.0],
+  [80.45, 8.0],
+  [80.45, 13.9],
+  [76.0, 13.9],
+  [76.0, 8.0],
 ];
 
 const DUMMY_DRIVER_EMAIL = "dummy.driver@taxi.local";
@@ -130,7 +130,7 @@ async function ensureRideBootstrapOnce(): Promise<void> {
         created_by: admin._id,
       });
     } else {
-      logger.warn("Admin missing — Chennai zone not created yet");
+      logger.warn("Admin missing — Tamil Nadu zone not created yet");
     }
   }
 
@@ -140,7 +140,7 @@ async function ensureRideBootstrapOnce(): Promise<void> {
     logger.warn({ error }, "Dummy driver bootstrap skipped");
   }
 
-  logger.info("Ride bootstrap ready (vehicle types + Chennai zone + dummy driver)");
+  logger.info("Ride bootstrap ready (vehicle types + Tamil Nadu zone + dummy driver)");
 }
 
 /** Idempotent — keeps Vercel/Atlas booking data ready on cold start. */
