@@ -9,6 +9,7 @@ import { forwardSocketBridge, isSocketBridgeConfigured } from "./socket-bridge.c
 import { getIoSafe } from "./socket";
 
 type EmitPayload = Record<string, unknown>;
+type NearbyDispatchResult = { targeted: number; broadcastAll: boolean };
 
 const emitLocal = (io: Server, room: string, event: string, payload: EmitPayload) => {
   io.to(room).emit(event, payload);
@@ -55,11 +56,10 @@ export const dispatchNewRideToNearbyDrivers = async (
   pickup: { lat: number; lng: number },
   payload: EmitPayload,
   options: NearbyDispatchOptions = {}
-): Promise<void> => {
+): Promise<NearbyDispatchResult> => {
   const io = getIoSafe();
   if (io) {
-    await emitNewRideToNearbyDrivers(io, pickup, payload, options);
-    return;
+    return emitNewRideToNearbyDrivers(io, pickup, payload, options);
   }
 
   const forwarded = await forwardSocketBridge({
@@ -78,6 +78,7 @@ export const dispatchNewRideToNearbyDrivers = async (
       "new_ride not pushed via socket — drivers will receive via REST polling"
     );
   }
+  return { targeted: 0, broadcastAll: false };
 };
 
 export const dispatchRideUnavailableToDrivers = async (rideId: string): Promise<void> => {

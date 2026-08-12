@@ -11,6 +11,7 @@ import { dispatchNewRideToNearbyDrivers, emitToRoom } from "../../../socket/sock
 import { validateRideLocations } from "../../operational-zone/operational-zone.service";
 import { emitCustomerAndRide } from "../../../utils/ride-socket-events.util";
 import { toFlexibleClientStatus } from "../../../utils/ride-emit.util";
+import { getNearbyDriverRadiusKm } from "../../../utils/nearby-drivers.util";
 
 const ACTIVE_RIDE_BLOCKED_STATUSES = [
   "PENDING_CONFIRMATION",
@@ -377,7 +378,7 @@ export const confirmRide = async (
     status: "SEARCHING_DRIVER",
     vehicle_type_id: ride.vehicle_type_id ? String(ride.vehicle_type_id) : null,
   };
-  await dispatchNewRideToNearbyDrivers(ride.pickup, newRidePayload, {
+  const dispatchResult = await dispatchNewRideToNearbyDrivers(ride.pickup, newRidePayload, {
     vehicleTypeId: ride.vehicle_type_id ? String(ride.vehicle_type_id) : null,
     rejectedDriverIds: ride.rejected_driver_ids ?? [],
   });
@@ -393,9 +394,20 @@ export const confirmRide = async (
   });
   joinRideRoomForUser(customerId, ride.id);
 
+  if (dispatchResult.targeted === 0) {
+    return {
+      message: `No nearby drivers available within ${getNearbyDriverRadiusKm()} km right now. Please try again.`,
+      ride: rideDetails,
+      searching: true,
+      nearby_drivers_notified: 0,
+    };
+  }
+
   return {
     message: "Ride confirmed",
     ride: rideDetails,
+    searching: true,
+    nearby_drivers_notified: dispatchResult.targeted,
   };
 };
 

@@ -14,7 +14,12 @@ import {
   dispatchNewRideToNearbyDrivers,
   dispatchRideUnavailableToDrivers,
 } from "../../../socket/socket-emit.service";
-import { getDriverLocationForMatching, distanceMeters } from "../../../utils/nearby-drivers.util";
+import {
+  getDriverLocationForMatching,
+  distanceMeters,
+  getNearbyDriverRadiusMeters,
+  getNearbyDriverRadiusKm,
+} from "../../../utils/nearby-drivers.util";
 import { persistUserLocation } from "../../../utils/driver-location-persist.util";
 import { acceptRideAtomically } from "../../../socket/ride-booking/ride-booking.repository";
 import { upsertOnlineDriver } from "../../../socket/ride-booking/ride-booking.store";
@@ -446,7 +451,7 @@ export const getIncomingRides = async (
     return { rides: [] };
   }
 
-  const maxRadiusM = 5000;
+  const maxRadiusM = getNearbyDriverRadiusMeters();
   const rides = await RideModel.find({
     status: "SEARCHING_DRIVER",
     driver_id: null,
@@ -478,12 +483,16 @@ export const acceptIncomingRide = async (driverIdInput: string | undefined, ride
     throw new HttpError(404, "Ride not found");
   }
   if (driverLocation && rideBefore.pickup?.lat && rideBefore.pickup?.lng) {
+    const maxRadiusM = getNearbyDriverRadiusMeters();
     const dist = distanceMeters(driverLocation, {
       lat: rideBefore.pickup.lat,
       lng: rideBefore.pickup.lng,
     });
-    if (dist > 5000) {
-      throw new HttpError(403, "This ride is more than 5 km from your location");
+    if (dist > maxRadiusM) {
+      throw new HttpError(
+        403,
+        `This ride is more than ${getNearbyDriverRadiusKm()} km from your location`
+      );
     }
   }
 

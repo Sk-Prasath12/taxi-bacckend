@@ -1,5 +1,6 @@
 import type { Server } from "socket.io";
 import { Types } from "mongoose";
+import { env } from "../config/env";
 import { logger } from "../config/logger";
 import { RideModel } from "../modules/customer/ride/ride.model";
 import { UserModel } from "../modules/users/users.model";
@@ -13,9 +14,12 @@ export type NearbyDispatchOptions = {
   rejectedDriverIds?: (string | Types.ObjectId)[];
 };
 
-const DEFAULT_RADIUS_M = 5000;
+const DEFAULT_RADIUS_M = Math.round(env.NEARBY_DRIVER_RADIUS_KM * 1000);
 const LOCATION_MAX_AGE_MS = 15 * 60 * 1000;
 const TERMINAL_RIDE_STATUSES = ["COMPLETED", "CANCELLED"] as const;
+
+export const getNearbyDriverRadiusMeters = (): number => DEFAULT_RADIUS_M;
+export const getNearbyDriverRadiusKm = (): number => env.NEARBY_DRIVER_RADIUS_KM;
 
 const toRadians = (value: number) => (value * Math.PI) / 180;
 
@@ -187,8 +191,9 @@ export const emitNewRideToNearbyDrivers = async (
         pickup,
         rejected: normalizeRejected(options.rejectedDriverIds).length,
         maxRadiusMeters: options.maxRadiusMeters ?? DEFAULT_RADIUS_M,
+        maxRadiusKm: Number(((options.maxRadiusMeters ?? DEFAULT_RADIUS_M) / 1000).toFixed(2)),
       },
-      "No online drivers within 5 km of pickup — ride stays SEARCHING_DRIVER"
+      "No online drivers within configured radius of pickup — ride stays SEARCHING_DRIVER"
     );
     return { targeted: 0, broadcastAll: false };
   }
