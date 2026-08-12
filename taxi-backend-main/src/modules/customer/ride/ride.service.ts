@@ -12,6 +12,7 @@ import { validateRideLocations } from "../../operational-zone/operational-zone.s
 import { emitCustomerAndRide } from "../../../utils/ride-socket-events.util";
 import { toFlexibleClientStatus } from "../../../utils/ride-emit.util";
 import { getNearbyDriverRadiusKm } from "../../../utils/nearby-drivers.util";
+import { expireSearchingRideIfNeeded } from "../../../utils/ride-search-timeout.util";
 
 const ACTIVE_RIDE_BLOCKED_STATUSES = [
   "PENDING_CONFIRMATION",
@@ -436,7 +437,8 @@ export const getRideStatus = async (customerIdInput: string | undefined, rideIdI
   }
 
   ensureRideOwnership(ride, customerId);
-  return await mapRideDetails(ride);
+  const current = await expireSearchingRideIfNeeded(ride);
+  return await mapRideDetails(current);
 };
 
 export const cancelRide = async (customerIdInput: string | undefined, rideIdInput?: string) => {

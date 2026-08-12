@@ -173,6 +173,8 @@ const buildTargetedPayload = (
   ...payload,
   distance_m: Math.round(distanceM),
   distance_km: Number((distanceM / 1000).toFixed(1)),
+  nearby_km: getNearbyDriverRadiusKm(),
+  nearby_radius_km: getNearbyDriverRadiusKm(),
 });
 
 /** Only nearby, on-duty drivers with GPS receive `new_ride` (no global broadcast). */

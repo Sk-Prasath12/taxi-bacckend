@@ -52,8 +52,10 @@ const envSchema = z.object({
   SMTP_FROM_EMAIL: z.string().min(1),
   SMTP_TLS_REJECT_UNAUTHORIZED: booleanFromEnv.default(true),
   OSRM_URL: z.string().min(1),
-  /** Max nearby-driver matching radius in kilometers (default 5km). */
-  NEARBY_DRIVER_RADIUS_KM: z.coerce.number().positive().default(5),
+  /** Max nearby-driver matching radius in kilometers (default 10km). */
+  NEARBY_DRIVER_RADIUS_KM: z.coerce.number().positive().default(10),
+  /** How long a SEARCHING_DRIVER request stays open before auto-cancel (seconds). */
+  RIDE_SEARCH_TIMEOUT_SEC: z.coerce.number().positive().default(120),
   RAZORPAY_KEY_ID: z.string().min(1),
   RAZORPAY_KEY_SECRET: z.string().min(1),
   AWS_ACCESS_KEY_ID: z.string().optional(),

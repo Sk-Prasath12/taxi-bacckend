@@ -20,6 +20,7 @@ import {
   getNearbyDriverRadiusMeters,
   getNearbyDriverRadiusKm,
 } from "../../../utils/nearby-drivers.util";
+import { expireSearchingRideIfNeeded } from "../../../utils/ride-search-timeout.util";
 import { persistUserLocation } from "../../../utils/driver-location-persist.util";
 import { acceptRideAtomically } from "../../../socket/ride-booking/ride-booking.repository";
 import { upsertOnlineDriver } from "../../../socket/ride-booking/ride-booking.store";
@@ -91,6 +92,7 @@ const mapIncomingRide = (ride: RideDocument) => ({
   fare: ride.fare,
   status: ride.status,
   createdAt: ride.createdAt,
+  nearby_km: getNearbyDriverRadiusKm(),
 });
 
 const OTP_MIN = 1000;
@@ -460,16 +462,24 @@ export const getIncomingRides = async (
     .sort({ createdAt: -1 })
     .limit(30);
 
-  const nearbyRides = rides.filter((ride) => {
-    if (!ride.pickup?.lat || !ride.pickup?.lng) return false;
-    return (
-      distanceMeters(driverLocation, { lat: ride.pickup.lat, lng: ride.pickup.lng }) <=
-      maxRadiusM
-    );
-  });
+  const activeRides = [];
+  for (const ride of rides) {
+    const current = await expireSearchingRideIfNeeded(ride);
+    if (current.status !== "SEARCHING_DRIVER" || current.driver_id) continue;
+    if (!current.pickup?.lat || !current.pickup?.lng) continue;
+    if (
+      distanceMeters(driverLocation, {
+        lat: current.pickup.lat,
+        lng: current.pickup.lng,
+      }) > maxRadiusM
+    ) {
+      continue;
+    }
+    activeRides.push(current);
+  }
 
   return {
-    rides: nearbyRides.slice(0, 20).map(mapIncomingRide),
+    rides: activeRides.slice(0, 20).map(mapIncomingRide),
   };
 };
 
@@ -482,11 +492,18 @@ export const acceptIncomingRide = async (driverIdInput: string | undefined, ride
   if (!rideBefore) {
     throw new HttpError(404, "Ride not found");
   }
-  if (driverLocation && rideBefore.pickup?.lat && rideBefore.pickup?.lng) {
+  const currentRide = await expireSearchingRideIfNeeded(rideBefore);
+  if (currentRide.status === "CANCELLED") {
+    throw new HttpError(409, "Ride request expired");
+  }
+  if (currentRide.status !== "SEARCHING_DRIVER" || currentRide.driver_id) {
+    throw new HttpError(409, "Ride already accepted by another driver.");
+  }
+  if (driverLocation && currentRide.pickup?.lat && currentRide.pickup?.lng) {
     const maxRadiusM = getNearbyDriverRadiusMeters();
     const dist = distanceMeters(driverLocation, {
-      lat: rideBefore.pickup.lat,
-      lng: rideBefore.pickup.lng,
+      lat: currentRide.pickup.lat,
+      lng: currentRide.pickup.lng,
     });
     if (dist > maxRadiusM) {
       throw new HttpError(
