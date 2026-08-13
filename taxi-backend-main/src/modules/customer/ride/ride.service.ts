@@ -43,6 +43,27 @@ const ensureCustomerId = (customerId?: string): string => {
   return customerId;
 };
 
+/** Ride matching uses the stored pickup pin only — never customer device GPS. */
+const resolveRidePickupForMatching = (ride: {
+  pickup?: { lat?: number; lng?: number } | null;
+}): { lat: number; lng: number } => {
+  const lat = ride.pickup?.lat;
+  const lng = ride.pickup?.lng;
+  if (
+    typeof lat !== "number" ||
+    typeof lng !== "number" ||
+    !Number.isFinite(lat) ||
+    !Number.isFinite(lng) ||
+    lat < -90 ||
+    lat > 90 ||
+    lng < -180 ||
+    lng > 180
+  ) {
+    throw new HttpError(400, "Ride pickup location is missing or invalid");
+  }
+  return { lat, lng };
+};
+
 const ensureCustomerCanCreateRide = async (userId: string): Promise<void> => {
   console.log("User ID:", userId);
   const user = await UserModel.findOne({
@@ -291,6 +312,7 @@ export const requestRide = async (
   const ride = await RideModel.create({
     customer_id: customerId,
     vehicle_type_id: vehicleType.id,
+    // Stored pickup pin is the only location used for nearby-driver matching.
     pickup: { lat: pickupLat, lng: pickupLng, address: pickupAddress?.trim?.() ? pickupAddress.trim() : "" },
     drop: { lat: dropLat, lng: dropLng, address: dropAddress?.trim?.() ? dropAddress.trim() : "" },
     distance_km,
@@ -303,6 +325,16 @@ export const requestRide = async (
     status: "PENDING_CONFIRMATION",
     driver_id: null,
   });
+
+  logger.info(
+    {
+      ride_id: ride.id,
+      customer_id: customerId,
+      pickup: ride.pickup,
+      drop: ride.drop,
+    },
+    "Ride created with customer-selected pickup pin (device GPS not used for matching)"
+  );
 
   return {
     ride_id: ride.id,
@@ -360,13 +392,18 @@ export const confirmRide = async (
   ride.status = "SEARCHING_DRIVER";
   await ride.save();
   console.log("Ride confirmed:", ride.id, ride.status);
+
+  // Match drivers to the pickup the customer set on the ride — never device GPS.
+  const pickupForMatching = resolveRidePickupForMatching(ride);
   logger.info(
     {
       ride_id: ride.id,
       customer_id: customerId,
       otp: generatedOtp,
+      pickup_for_matching: pickupForMatching,
+      pickup_address: ride.pickup?.address ?? "",
     },
-    "Ride OTP generated"
+    "Ride OTP generated; dispatching to drivers near ride pickup pin"
   );
 
   const newRidePayload = {
@@ -379,7 +416,7 @@ export const confirmRide = async (
     status: "SEARCHING_DRIVER",
     vehicle_type_id: ride.vehicle_type_id ? String(ride.vehicle_type_id) : null,
   };
-  const dispatchResult = await dispatchNewRideToNearbyDrivers(ride.pickup, newRidePayload, {
+  const dispatchResult = await dispatchNewRideToNearbyDrivers(pickupForMatching, newRidePayload, {
     vehicleTypeId: ride.vehicle_type_id ? String(ride.vehicle_type_id) : null,
     rejectedDriverIds: ride.rejected_driver_ids ?? [],
   });
@@ -397,7 +434,7 @@ export const confirmRide = async (
 
   if (dispatchResult.targeted === 0) {
     return {
-      message: `No nearby drivers available within ${getNearbyDriverRadiusKm()} km right now. Please try again.`,
+      message: `No nearby drivers available within ${getNearbyDriverRadiusKm()} km of your pickup location. Please try again.`,
       ride: rideDetails,
       searching: true,
       nearby_drivers_notified: 0,

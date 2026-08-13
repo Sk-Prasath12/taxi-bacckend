@@ -380,8 +380,15 @@ export const rejectIncomingRide = async (driverIdInput: string | undefined, ride
   }
 
   try {
+    const pickupForMatching = {
+      lat: Number(ride.pickup?.lat),
+      lng: Number(ride.pickup?.lng),
+    };
+    if (!Number.isFinite(pickupForMatching.lat) || !Number.isFinite(pickupForMatching.lng)) {
+      throw new Error("Ride pickup location is missing or invalid");
+    }
     await dispatchNewRideToNearbyDrivers(
-      ride.pickup,
+      pickupForMatching,
       {
         ride_id: ride.id,
         pickup: ride.pickup,

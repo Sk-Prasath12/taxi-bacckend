@@ -63,7 +63,8 @@ export const findBusyDriverIds = async (): Promise<string[]> => {
 type CandidateDriver = { driverId: string; location: GeoPoint; source: "memory" | "db" };
 
 /**
- * Resolves ONLINE, verified drivers with fresh GPS near pickup (memory store + MongoDB).
+ * Resolves ONLINE, verified drivers with fresh GPS near the ride pickup pin
+ * (memory store + MongoDB). Never uses customer device GPS.
  */
 export const findNearbyEligibleDrivers = async (
   pickup: GeoPoint,
@@ -184,6 +185,16 @@ export const emitNewRideToNearbyDrivers = async (
   payload: Record<string, unknown>,
   options: NearbyDispatchOptions = {}
 ) => {
+  if (
+    typeof pickup?.lat !== "number" ||
+    typeof pickup?.lng !== "number" ||
+    !Number.isFinite(pickup.lat) ||
+    !Number.isFinite(pickup.lng)
+  ) {
+    logger.error({ ride_id: payload.ride_id, pickup }, "Invalid ride pickup — skipping nearby driver dispatch");
+    return { targeted: 0, broadcastAll: false };
+  }
+
   const nearby = await findNearbyEligibleDrivers(pickup, options);
 
   if (nearby.length === 0) {
