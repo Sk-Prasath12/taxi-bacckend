@@ -1,30 +1,21 @@
-import nodemailer from "nodemailer";
-import { env } from "../../config/env";
 import { logger } from "../../config/logger";
 import { HttpError } from "../../utils/http-error";
 import { comparePassword, hashPassword } from "../../utils/password.util";
 import { generateAccessToken, generateRefreshToken } from "../../utils/jwt.util";
+import { queueOtpEmail } from "../../utils/otp-mail.util";
 import { CustomerModel } from "./customer.model";
 import { CustomerOtpModel } from "./customer.otp.model";
 
-const OTP_EXPIRY_MINUTES = 5;
+const OTP_EXPIRY_MINUTES = 10;
 const OTP_PURPOSE_REGISTER = "REGISTER";
 const OTP_PURPOSE_FORGOT_PASSWORD = "FORGOT_PASSWORD";
 
-const transporter = nodemailer.createTransport({
-  host: env.SMTP_HOST,
-  port: env.SMTP_PORT,
-  secure: env.SMTP_PORT === 465,
-  auth: {
-    user: env.SMTP_USER,
-    pass: env.SMTP_PASSWORD,
-  },
-  tls: {
-    rejectUnauthorized: env.SMTP_TLS_REJECT_UNAUTHORIZED,
-  },
-});
-
 const generateOtp = (): string => String(Math.floor(100000 + Math.random() * 900000));
+
+type OtpDispatchResult = {
+  otp: string;
+  email_sent: boolean;
+};
 
 const getOtpEmailTemplate = (purpose: string, otp: string): string => {
   const heading = purpose === OTP_PURPOSE_FORGOT_PASSWORD ? "Password Reset Code" : "Email Verification Code";
@@ -32,20 +23,15 @@ const getOtpEmailTemplate = (purpose: string, otp: string): string => {
     purpose === OTP_PURPOSE_FORGOT_PASSWORD
       ? "Use the OTP below to reset your password."
       : "Use the OTP below to verify your email.";
-  const footer =
-    purpose === OTP_PURPOSE_FORGOT_PASSWORD
-      ? "If you did not request a password reset, please ignore this email."
-      : "This OTP expires in 5 minutes.";
-
   return `
   <div style="font-family: Arial, sans-serif; background: #f4f7fb; padding: 24px;">
     <div style="max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 12px; padding: 24px; border: 1px solid #e6ebf2;">
-      <h2 style="margin: 0 0 16px; color: #1f2937;">Taxi App</h2>
+      <h2 style="margin: 0 0 16px; color: #1f2937;">${heading}</h2>
       <p style="margin: 0 0 12px; color: #4b5563;">${description}</p>
       <div style="font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #111827; margin: 16px 0;">
         ${otp}
       </div>
-      <p style="margin: 0; color: #6b7280;">${footer}</p>
+      <p style="margin: 0; color: #6b7280;">This OTP expires in ${OTP_EXPIRY_MINUTES} minutes.</p>
     </div>
   </div>
   `;
@@ -57,12 +43,12 @@ const getOtpSubject = (purpose: string): string => {
     : "Taxi App Email Verification Code";
 };
 
-const sendOtpEmail = async (email: string, purpose: string, otp: string): Promise<void> => {
-  await transporter.sendMail({
-    from: env.SMTP_FROM_EMAIL,
+const sendOtpEmail = (email: string, purpose: string, otp: string): void => {
+  queueOtpEmail({
     to: email,
     subject: getOtpSubject(purpose),
     html: getOtpEmailTemplate(purpose, otp),
+    logLabel: purpose === OTP_PURPOSE_FORGOT_PASSWORD ? "Customer forgot-password" : "Customer registration",
   });
 };
 
@@ -70,7 +56,7 @@ export const sendRegistrationOtp = async (
   name: string,
   email: string,
   phone: string
-): Promise<void> => {
+): Promise<OtpDispatchResult> => {
   const normalizedName = name.trim();
   const normalizedEmail = email.toLowerCase().trim();
   const normalizedPhone = phone.trim();
@@ -94,6 +80,12 @@ export const sendRegistrationOtp = async (
     );
   }
 
+  await CustomerOtpModel.deleteMany({
+    email: normalizedEmail,
+    purpose: OTP_PURPOSE_REGISTER,
+    verified: false,
+  });
+
   const otp = generateOtp();
   const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60 * 1000);
 
@@ -107,18 +99,9 @@ export const sendRegistrationOtp = async (
     verified: false,
   });
 
-  try {
-    await sendOtpEmail(normalizedEmail, OTP_PURPOSE_REGISTER, otp);
-  } catch (error) {
-    if (env.NODE_ENV === "development") {
-      logger.warn(
-        { email: normalizedEmail, otp, err: error },
-        "Registration OTP email failed; in dev you can verify with 123456"
-      );
-    } else {
-      throw error;
-    }
-  }
+  sendOtpEmail(normalizedEmail, OTP_PURPOSE_REGISTER, otp);
+  logger.info({ email: normalizedEmail }, "Registration OTP saved; email queued");
+  return { otp, email_sent: true };
 };
 
 export const verifyRegistrationOtp = async (email: string, otp: string): Promise<void> => {
@@ -315,7 +298,7 @@ export const updateCustomerProfile = async (userId?: string, name?: string, phon
   };
 };
 
-export const sendForgotPasswordOtp = async (email: string): Promise<void> => {
+export const sendForgotPasswordOtp = async (email: string): Promise<OtpDispatchResult> => {
   const normalizedEmail = email.toLowerCase().trim();
   const customer = await CustomerModel.findOne({ email: normalizedEmail });
 
@@ -340,7 +323,9 @@ export const sendForgotPasswordOtp = async (email: string): Promise<void> => {
     verified: false,
   });
 
-  await sendOtpEmail(normalizedEmail, OTP_PURPOSE_FORGOT_PASSWORD, otp);
+  sendOtpEmail(normalizedEmail, OTP_PURPOSE_FORGOT_PASSWORD, otp);
+  logger.info({ email: normalizedEmail }, "Forgot-password OTP saved; email queued");
+  return { otp, email_sent: true };
 };
 
 export const verifyForgotPasswordOtp = async (email: string, otp: string): Promise<void> => {

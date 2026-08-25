@@ -26,8 +26,12 @@ const ACTIVE_RIDE_BLOCKED_STATUSES = [
 ] as const;
 const INACTIVE_RIDE_STATUSES = ["COMPLETED", "CANCELLED"] as const;
 const FALLBACK_DURATION_MIN = 15;
-const OTP_MIN = 1000;
+const OTP_MIN = 1001;
 const OTP_MAX = 9999;
+const PLACEHOLDER_RIDE_OTP = 1000;
+
+const isUsableRideOtp = (otp: unknown): otp is number =>
+  typeof otp === "number" && otp >= OTP_MIN && otp <= OTP_MAX && otp !== PLACEHOLDER_RIDE_OTP;
 
 /** Short / nearby trips still charge at least 1 km at the vehicle rate. */
 const resolveTripFare = (distanceKm: number, perKmRate: number): number => {
@@ -160,7 +164,7 @@ const mapRideDetails = async (ride: RideDocument) => {
     client_status: toFlexibleClientStatus(ride),
     payment_mode: ride.payment_mode ?? "CASH",
     payment_status: ride.payment_status ?? "PENDING",
-    otp: typeof ride.otp === "number" ? ride.otp : null,
+    otp: isUsableRideOtp(ride.otp) ? ride.otp : null,
     otp_verified: Boolean(ride.otp_verified),
     drop_otp: typeof ride.drop_otp === "number" ? ride.drop_otp : null,
     drop_otp_verified: Boolean(ride.drop_otp_verified),

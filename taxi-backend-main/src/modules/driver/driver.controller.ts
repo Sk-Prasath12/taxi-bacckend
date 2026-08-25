@@ -49,10 +49,12 @@ export const driverRegisterEmailController = async (
 ) => {
   try {
     const { email } = req.body;
-    await sendDriverRegistrationOtp(email);
+    const result = await sendDriverRegistrationOtp(email);
     return res.status(200).json({
       success: true,
       message: "OTP sent successfully",
+      email_sent: result.email_sent,
+      otp: result.otp,
     });
   } catch (error) {
     return next(error);
@@ -93,10 +95,12 @@ export const driverForgotPasswordEmailController = async (
 ) => {
   try {
     const { email } = req.body;
-    await sendDriverForgotPasswordOtp(email);
+    const result = await sendDriverForgotPasswordOtp(email);
     return res.status(200).json({
       success: true,
       message: "OTP sent successfully",
+      email_sent: result.email_sent,
+      otp: result.otp,
     });
   } catch (error) {
     return next(error);

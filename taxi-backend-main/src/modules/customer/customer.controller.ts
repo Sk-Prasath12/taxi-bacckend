@@ -19,11 +19,15 @@ export const customerRegisterEmailController = async (
 ) => {
   try {
     const { name, email, phone } = req.body;
-    await sendRegistrationOtp(name, email, phone);
+    const result = await sendRegistrationOtp(name, email, phone);
 
     return res.status(200).json({
       success: true,
-      message: "OTP sent successfully",
+      message: result.email_sent
+        ? "OTP sent successfully"
+        : "OTP generated. Enter the code shown below (email may be delayed).",
+      email_sent: result.email_sent,
+      otp: result.otp,
     });
   } catch (error) {
     return next(error);
@@ -117,10 +121,14 @@ export const customerForgotPasswordEmailController = async (
 ) => {
   try {
     const { email } = req.body;
-    await sendForgotPasswordOtp(email);
+    const result = await sendForgotPasswordOtp(email);
     return res.status(200).json({
       success: true,
-      message: "OTP sent successfully",
+      message: result.email_sent
+        ? "OTP sent successfully"
+        : "OTP generated. Enter the code shown below (email may be delayed).",
+      email_sent: result.email_sent,
+      otp: result.otp,
     });
   } catch (error) {
     return next(error);

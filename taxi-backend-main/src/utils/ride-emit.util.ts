@@ -77,7 +77,7 @@ export const buildRideEmitPayload = async (ride: RideDocument) => {
     client_status: toFlexibleClientStatus(ride),
     payment_mode: ride.payment_mode ?? "CASH",
     payment_status: ride.payment_status ?? "PENDING",
-    otp: typeof ride.otp === "number" ? ride.otp : null,
+    otp: typeof ride.otp === "number" && ride.otp !== 1000 ? ride.otp : null,
     otp_verified: Boolean(ride.otp_verified),
     drop_otp: typeof extended.drop_otp === "number" ? extended.drop_otp : null,
     drop_otp_verified: Boolean(extended.drop_otp_verified),

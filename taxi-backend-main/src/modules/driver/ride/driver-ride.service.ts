@@ -110,11 +110,15 @@ const mapIncomingRide = (
     : null,
 });
 
-const OTP_MIN = 1000;
+const OTP_MIN = 1001;
 const OTP_MAX = 9999;
+const PLACEHOLDER_RIDE_OTP = 1000;
 
 const generateRideOtp = (): number =>
   Math.floor(Math.random() * (OTP_MAX - OTP_MIN + 1)) + OTP_MIN;
+
+const hasUsablePickupOtp = (otp: unknown): otp is number =>
+  typeof otp === "number" && otp >= OTP_MIN && otp <= OTP_MAX && otp !== PLACEHOLDER_RIDE_OTP;
 
 const emitRideLifecycle = async (ride: RideDocument, statusForClient?: string) => {
   const customerId = String(ride.customer_id);
@@ -628,8 +632,11 @@ export const markRideArrivedAtPickup = async (driverIdInput: string | undefined,
     throw new HttpError(400, "Ride must be assigned before marking arrived");
   }
 
-  ride.otp = generateRideOtp();
-  ride.otp_verified = false;
+  // Keep the confirm-ride OTP. Never mint a new code on arrive/re-tap.
+  if (!hasUsablePickupOtp(ride.otp)) {
+    ride.otp = generateRideOtp();
+    ride.otp_verified = false;
+  }
   ride.status = "ARRIVED_AT_PICKUP";
   await ride.save();
 

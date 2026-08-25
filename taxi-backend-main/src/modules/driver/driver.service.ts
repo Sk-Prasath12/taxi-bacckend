@@ -1,8 +1,8 @@
-import nodemailer from "nodemailer";
-import { env } from "../../config/env";
+import { logger } from "../../config/logger";
 import { HttpError } from "../../utils/http-error";
 import { comparePassword, hashPassword } from "../../utils/password.util";
 import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from "../../utils/jwt.util";
+import { queueOtpEmail } from "../../utils/otp-mail.util";
 import {
   ensureDriverReadyForOnline,
   getProfile,
@@ -15,24 +15,16 @@ import { RideModel } from "../customer/ride/ride.model";
 import { DriverOtpModel } from "./driver.otp.model";
 import { VehicleTypeModel } from "../vehicle-type/vehicle-type.model";
 
-const OTP_EXPIRY_MINUTES = 5;
+const OTP_EXPIRY_MINUTES = 10;
 const OTP_PURPOSE_REGISTER = "REGISTER" as const;
 const OTP_PURPOSE_FORGOT_PASSWORD = "FORGOT_PASSWORD" as const;
 
-const transporter = nodemailer.createTransport({
-  host: env.SMTP_HOST,
-  port: env.SMTP_PORT,
-  secure: env.SMTP_PORT === 465,
-  auth: {
-    user: env.SMTP_USER,
-    pass: env.SMTP_PASSWORD,
-  },
-  tls: {
-    rejectUnauthorized: env.SMTP_TLS_REJECT_UNAUTHORIZED,
-  },
-});
-
 const generateOtp = (): string => String(Math.floor(100000 + Math.random() * 900000));
+
+type OtpDispatchResult = {
+  otp: string;
+  email_sent: boolean;
+};
 
 const getOtpEmailTemplate = (purpose: string, otp: string): string => {
   const heading =
@@ -45,12 +37,12 @@ const getOtpEmailTemplate = (purpose: string, otp: string): string => {
   return `
   <div style="font-family: Arial, sans-serif; background: #f4f7fb; padding: 24px;">
     <div style="max-width: 520px; margin: 0 auto; background: #ffffff; border-radius: 12px; padding: 24px; border: 1px solid #e6ebf2;">
-      <h2 style="margin: 0 0 16px; color: #1f2937;">Taxi App Driver</h2>
+      <h2 style="margin: 0 0 16px; color: #1f2937;">${heading}</h2>
       <p style="margin: 0 0 12px; color: #4b5563;">${description}</p>
       <div style="font-size: 36px; font-weight: 700; letter-spacing: 8px; color: #111827; margin: 16px 0;">
         ${otp}
       </div>
-      <p style="margin: 0; color: #6b7280;">This OTP expires in 5 minutes.</p>
+      <p style="margin: 0; color: #6b7280;">This OTP expires in ${OTP_EXPIRY_MINUTES} minutes.</p>
     </div>
   </div>
   `;
@@ -62,12 +54,12 @@ const getOtpSubject = (purpose: string): string => {
     : "Taxi App Driver Email Verification Code";
 };
 
-const sendOtpEmail = async (email: string, purpose: string, otp: string): Promise<void> => {
-  await transporter.sendMail({
-    from: env.SMTP_FROM_EMAIL,
+const sendOtpEmail = (email: string, purpose: string, otp: string): void => {
+  queueOtpEmail({
     to: email,
     subject: getOtpSubject(purpose),
     html: getOtpEmailTemplate(purpose, otp),
+    logLabel: purpose === OTP_PURPOSE_FORGOT_PASSWORD ? "Driver forgot-password" : "Driver registration",
   });
 };
 
@@ -93,7 +85,7 @@ const assertEmailAvailableForDriverRegistration = async (normalizedEmail: string
   }
 };
 
-export const sendDriverRegistrationOtp = async (email: string): Promise<void> => {
+export const sendDriverRegistrationOtp = async (email: string): Promise<OtpDispatchResult> => {
   const normalizedEmail = email.toLowerCase().trim();
   await assertEmailAvailableForDriverRegistration(normalizedEmail);
 
@@ -108,13 +100,9 @@ export const sendDriverRegistrationOtp = async (email: string): Promise<void> =>
     verified: false,
   });
 
-  try {
-    await sendOtpEmail(normalizedEmail, OTP_PURPOSE_REGISTER, otp);
-    console.log(`[Driver Registration] OTP email sent to ${normalizedEmail}`);
-  } catch (emailError) {
-    console.error(`[Driver Registration] Failed to send OTP email:`, emailError);
-    // Don't throw error - OTP is still created in database for testing
-  }
+  sendOtpEmail(normalizedEmail, OTP_PURPOSE_REGISTER, otp);
+  logger.info({ email: normalizedEmail }, "Driver registration OTP saved; email queued");
+  return { otp, email_sent: true };
 };
 
 export const verifyDriverRegistrationOtp = async (email: string, otp: string): Promise<void> => {
@@ -227,7 +215,7 @@ export const setDriverRegistrationPassword = async (email: string, password: str
   };
 };
 
-export const sendDriverForgotPasswordOtp = async (email: string): Promise<void> => {
+export const sendDriverForgotPasswordOtp = async (email: string): Promise<OtpDispatchResult> => {
   const normalizedEmail = email.toLowerCase().trim();
   const driver = await UserModel.findOne({ email: normalizedEmail, role: "DRIVER" });
   if (!driver) {
@@ -251,14 +239,9 @@ export const sendDriverForgotPasswordOtp = async (email: string): Promise<void> 
     verified: false,
   });
 
-  try {
-    await sendOtpEmail(normalizedEmail, OTP_PURPOSE_FORGOT_PASSWORD, otp);
-    console.log(`[Driver Forgot Password] OTP email sent to ${normalizedEmail}`);
-  } catch (emailError) {
-    console.error(`[Driver Forgot Password] Failed to send OTP email:`, emailError);
-    // Don't throw error - OTP is still created in database for testing
-    // In production, you might want to throw the error
-  }
+  sendOtpEmail(normalizedEmail, OTP_PURPOSE_FORGOT_PASSWORD, otp);
+  logger.info({ email: normalizedEmail }, "Driver forgot-password OTP saved; email queued");
+  return { otp, email_sent: true };
 };
 
 export const verifyDriverForgotPasswordOtp = async (email: string, otp: string): Promise<void> => {
