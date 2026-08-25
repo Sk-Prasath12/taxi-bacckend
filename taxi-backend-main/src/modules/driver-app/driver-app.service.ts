@@ -103,11 +103,25 @@ export const fetchDriverProfile = async (userId: string) => {
 };
 
 export const updateDriverProfile = async (userId: string, payload: any) => {
+  const driver = await ensureDriver(userId);
+  if (typeof payload.name === "string" && payload.name.trim().length > 0) {
+    driver.name = payload.name.trim();
+  }
+  if (typeof payload.phone === "string" && payload.phone.trim().length > 0) {
+    driver.phone = payload.phone.trim();
+  }
+  await driver.save();
   const updated = await createOrUpdateProfile(userId, {
     phone: payload.phone,
     address: payload.bio,
   });
-  return { success: true, message: "Driver profile updated", profile: updated };
+  return {
+    success: true,
+    message: "Driver profile updated",
+    profile: updated,
+    name: driver.name,
+    phone: driver.phone,
+  };
 };
 
 export const registerDriverPhoto = async (userId: string, photoUrl: string) => {

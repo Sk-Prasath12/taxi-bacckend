@@ -13,6 +13,7 @@ import {
   setDriverForgotPasswordPassword,
   setDriverRegistrationPassword,
   updateDriverStatus,
+  updateDriverVehicle,
   verifyDriverForgotPasswordOtp,
   verifyDriverRegistrationOtp,
 } from "./driver.service";
@@ -146,6 +147,19 @@ export const driverLoginController = async (req: Request, res: Response, next: N
 export const driverGetProfileController = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = await getDriverProfile(req.authUser?.userId);
+    return res.status(200).json(data);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const driverUpdateVehicleController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const data = await updateDriverVehicle(req.authUser?.userId, req.body ?? {});
     return res.status(200).json(data);
   } catch (error) {
     return next(error);

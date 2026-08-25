@@ -29,6 +29,7 @@ import {
   driverForgotPasswordVerifyOtpController,
   driverForgotPasswordSetPasswordController,
   driverUpdateStatusController,
+  driverUpdateVehicleController,
   driverVerifyOtpController,
 } from "./driver.controller";
 import driverRideRouter from "./ride/driver-ride.routes";
@@ -54,6 +55,24 @@ driverRouter.post(
 driverRouter.post("/api/drivers/login", validate(driverLoginSchema), driverLoginController);
 
 driverRouter.get("/api/drivers/profile", requireAuth, requireRole(["DRIVER"]), driverGetProfileController);
+driverRouter.patch(
+  "/api/drivers/vehicle",
+  requireAuth,
+  requireRole(["DRIVER"]),
+  driverUpdateVehicleController
+);
+driverRouter.post(
+  "/api/drivers/vehicle",
+  requireAuth,
+  requireRole(["DRIVER"]),
+  driverUpdateVehicleController
+);
+driverRouter.patch(
+  "/api/drivers/profile/vehicle",
+  requireAuth,
+  requireRole(["DRIVER"]),
+  driverUpdateVehicleController
+);
 driverRouter.get("/api/drivers/wallet", requireAuth, requireRole(["DRIVER"]), driverGetWalletController);
 driverRouter.get(
   "/api/drivers/earnings/cash",

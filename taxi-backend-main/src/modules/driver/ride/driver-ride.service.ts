@@ -24,7 +24,11 @@ import { expireSearchingRideIfNeeded } from "../../../utils/ride-search-timeout.
 import { persistUserLocation } from "../../../utils/driver-location-persist.util";
 import { acceptRideAtomically } from "../../../socket/ride-booking/ride-booking.repository";
 import { upsertOnlineDriver } from "../../../socket/ride-booking/ride-booking.store";
-import { emitCustomerAndRide, emitRideStatusToParties } from "../../../utils/ride-socket-events.util";
+import { emitCustomerAndRide, emitRideStatusToParties, emitAdminRideUpdate } from "../../../utils/ride-socket-events.util";
+import {
+  driverMatchesVehicleType,
+  getDriverVehicleTypeId,
+} from "../../../utils/driver-vehicle-type.util";
 
 const ensureDriverId = (driverId?: string) => {
   if (!driverId) {
@@ -83,7 +87,10 @@ const getRideByIdOrThrow = async (rideIdInput?: string) => {
   return ride;
 };
 
-const mapIncomingRide = (ride: RideDocument) => ({
+const mapIncomingRide = (
+  ride: RideDocument,
+  customer?: { name?: string; phone?: string | null } | null
+) => ({
   ride_id: ride.id,
   pickup: ride.pickup,
   drop: ride.drop,
@@ -91,8 +98,16 @@ const mapIncomingRide = (ride: RideDocument) => ({
   duration_min: ride.duration_min ?? null,
   fare: ride.fare,
   status: ride.status,
+  vehicle_type_id: ride.vehicle_type_id ? String(ride.vehicle_type_id) : null,
   createdAt: ride.createdAt,
   nearby_km: getNearbyDriverRadiusKm(),
+  customer: customer
+    ? {
+        id: String(ride.customer_id),
+        name: customer.name ?? "Customer",
+        phone: customer.phone ?? null,
+      }
+    : null,
 });
 
 const OTP_MIN = 1000;
@@ -125,6 +140,16 @@ const emitRideLifecycle = async (ride: RideDocument, statusForClient?: string) =
     payment_status: ride.payment_status,
   };
   emitRideStatusToParties(customerId, ride.id, clientStatus, payload);
+  void emitAdminRideUpdate(
+    clientStatus === "COMPLETED"
+      ? "ride_completed"
+      : clientStatus === "ARRIVED"
+        ? "driver_arrived"
+        : clientStatus === "STARTED"
+          ? "ride_started"
+          : "ride_status_update",
+    payload
+  );
 };
 
 const calculateDynamicFare = async (ride: RideDocument): Promise<number> => {
@@ -460,6 +485,7 @@ export const getIncomingRides = async (
     return { rides: [] };
   }
 
+  const driverVehicleTypeId = await getDriverVehicleTypeId(driver.id);
   const maxRadiusM = getNearbyDriverRadiusMeters();
   const rides = await RideModel.find({
     status: "SEARCHING_DRIVER",
@@ -469,11 +495,17 @@ export const getIncomingRides = async (
     .sort({ createdAt: -1 })
     .limit(30);
 
-  const activeRides = [];
+  const activeRides: RideDocument[] = [];
   for (const ride of rides) {
     const current = await expireSearchingRideIfNeeded(ride);
     if (current.status !== "SEARCHING_DRIVER" || current.driver_id) continue;
     if (!current.pickup?.lat || !current.pickup?.lng) continue;
+    if (
+      current.vehicle_type_id &&
+      !driverMatchesVehicleType(driverVehicleTypeId, String(current.vehicle_type_id))
+    ) {
+      continue;
+    }
     if (
       distanceMeters(driverLocation, {
         lat: current.pickup.lat,
@@ -485,8 +517,18 @@ export const getIncomingRides = async (
     activeRides.push(current);
   }
 
+  const customerIds = [...new Set(activeRides.map((r) => String(r.customer_id)))];
+  const customers = customerIds.length
+    ? await UserModel.find({ _id: { $in: customerIds }, role: "CUSTOMER" })
+        .select("name phone")
+        .lean()
+    : [];
+  const customerById = new Map(customers.map((c) => [String(c._id), c]));
+
   return {
-    rides: activeRides.slice(0, 20).map(mapIncomingRide),
+    rides: activeRides.slice(0, 20).map((ride) =>
+      mapIncomingRide(ride, customerById.get(String(ride.customer_id)) ?? null)
+    ),
   };
 };
 
@@ -505,6 +547,13 @@ export const acceptIncomingRide = async (driverIdInput: string | undefined, ride
   }
   if (currentRide.status !== "SEARCHING_DRIVER" || currentRide.driver_id) {
     throw new HttpError(409, "Ride already accepted by another driver.");
+  }
+  const driverVehicleTypeId = await getDriverVehicleTypeId(driver.id);
+  if (
+    currentRide.vehicle_type_id &&
+    !driverMatchesVehicleType(driverVehicleTypeId, String(currentRide.vehicle_type_id))
+  ) {
+    throw new HttpError(403, "Your vehicle type does not match this ride request");
   }
   if (driverLocation && currentRide.pickup?.lat && currentRide.pickup?.lng) {
     const maxRadiusM = getNearbyDriverRadiusMeters();
@@ -556,6 +605,12 @@ export const acceptIncomingRide = async (driverIdInput: string | undefined, ride
     "Your driver is on the way"
   );
   joinRideRoomForUser(driver.id, ride.id);
+  void emitAdminRideUpdate("ride_accepted", {
+    ride_id: ride.id,
+    status: "ACCEPTED",
+    ride: ridePayload,
+    driver_id: driver.id,
+  });
 
   return {
     message: "Ride accepted successfully",

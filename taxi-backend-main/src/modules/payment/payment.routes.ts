@@ -3,7 +3,13 @@ import { z } from "zod";
 import { requireAuth } from "../../middlewares/auth.middleware";
 import { requireRole } from "../../middlewares/role.middleware";
 import { validate } from "../../middlewares/validate.middleware";
-import { createPaymentOrderController, verifyPaymentController } from "./payment.controller";
+import {
+  adminPaymentHistoryController,
+  createPaymentOrderController,
+  customerPaymentHistoryController,
+  driverPaymentHistoryController,
+  verifyPaymentController,
+} from "./payment.controller";
 
 const createOrderSchema = z.object({
   body: z.object({
@@ -26,8 +32,37 @@ const verifyPaymentSchema = z.object({
 
 const paymentRouter = Router();
 
-paymentRouter.use("/api/payments", requireAuth, requireRole(["CUSTOMER"]));
-paymentRouter.post("/api/payments/create-order", validate(createOrderSchema), createPaymentOrderController);
-paymentRouter.post("/api/payments/verify", validate(verifyPaymentSchema), verifyPaymentController);
+paymentRouter.post(
+  "/api/payments/create-order",
+  requireAuth,
+  requireRole(["CUSTOMER"]),
+  validate(createOrderSchema),
+  createPaymentOrderController
+);
+paymentRouter.post(
+  "/api/payments/verify",
+  requireAuth,
+  requireRole(["CUSTOMER"]),
+  validate(verifyPaymentSchema),
+  verifyPaymentController
+);
+paymentRouter.get(
+  "/api/payments/history",
+  requireAuth,
+  requireRole(["CUSTOMER"]),
+  customerPaymentHistoryController
+);
+paymentRouter.get(
+  "/api/drivers/payments/history",
+  requireAuth,
+  requireRole(["DRIVER"]),
+  driverPaymentHistoryController
+);
+paymentRouter.get(
+  "/api/admin/payments/history",
+  requireAuth,
+  requireRole(["ADMIN"]),
+  adminPaymentHistoryController
+);
 
 export default paymentRouter;

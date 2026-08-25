@@ -13,6 +13,18 @@ const getDriverDetails = async (driverId?: string | null) => {
   };
 };
 
+const getCustomerDetails = async (customerId?: string | null) => {
+  if (!customerId) return null;
+  const customer = await UserModel.findOne({ _id: customerId, role: "CUSTOMER" });
+  if (!customer) return null;
+  return {
+    id: customer.id,
+    name: customer.name,
+    phone: customer.phone ?? null,
+    email: customer.email ?? null,
+  };
+};
+
 /** Client-facing status including flexible drop-reached stages. */
 export const toFlexibleClientStatus = (ride: RideDocument): string => {
   if (ride.status === "SEARCHING_DRIVER") return "SEARCHING";
@@ -34,6 +46,7 @@ export const toFlexibleClientStatus = (ride: RideDocument): string => {
 
 export const buildRideEmitPayload = async (ride: RideDocument) => {
   const driver = await getDriverDetails(ride.driver_id ? String(ride.driver_id) : null);
+  const customer = await getCustomerDetails(String(ride.customer_id));
   const extended = ride as RideDocument & {
     drop_otp?: number;
     drop_otp_verified?: boolean;
@@ -71,6 +84,7 @@ export const buildRideEmitPayload = async (ride: RideDocument) => {
     drop_reached: Boolean(extended.drop_reached),
     trip_started_at: extended.trip_started_at ?? null,
     driver,
+    customer,
     createdAt: ride.createdAt,
     updatedAt: ride.updatedAt,
   };

@@ -15,6 +15,7 @@ import { PaymentModel } from "./payment.model";
 import {
   emitCustomerAndRide,
   emitRideStatusToParties,
+  emitAdminRideUpdate,
 } from "../../utils/ride-socket-events.util";
 
 let razorpayClient: Razorpay | null = null;
@@ -105,6 +106,12 @@ const finalizeOnlinePaymentSuccess = async (ride: RideDocument) => {
   };
 
   emitCustomerAndRide(customerId, rideId, "payment_success", paymentPayload);
+  void emitAdminRideUpdate("payment_updated", {
+    ...paymentPayload,
+    customer_id: customerId,
+    driver_id: ride.driver_id ? String(ride.driver_id) : null,
+    status: ride.status,
+  });
 
   if (ride.driver_id) {
     const driverId = String(ride.driver_id);
@@ -179,6 +186,22 @@ export const createPaymentOrder = async (customerIdInput: string | undefined, ri
   if (ride.payment_status === "SUCCESS") {
     throw new HttpError(409, "Payment is already completed for this ride");
   }
+
+  const existingCreated = await PaymentModel.findOne({
+    ride_id: ride._id,
+    status: "CREATED",
+  }).sort({ createdAt: -1 });
+
+  if (existingCreated?.order_id) {
+    return {
+      order_id: existingCreated.order_id,
+      amount: Math.round(ride.fare * 100),
+      currency: "INR",
+      key: env.RAZORPAY_KEY_ID,
+      reused: true,
+    };
+  }
+
   if (!ride.fare || ride.fare <= 0) {
     throw new HttpError(400, "Invalid fare for payment");
   }
@@ -259,6 +282,28 @@ export const verifyPayment = async (customerIdInput: string | undefined, input: 
       driver_amount: driverAmount,
     };
   }
+
+  // Idempotent: same payment_id already recorded as SUCCESS elsewhere.
+  const existingByPaymentId = await PaymentModel.findOne({
+    payment_id,
+    status: "SUCCESS",
+  }).lean();
+  if (existingByPaymentId) {
+    if (String(existingByPaymentId.ride_id) === String(ride._id)) {
+      ride.payment_status = "SUCCESS";
+      await ride.save();
+      const { commission, driverAmount } = calculateCommission(ride.fare);
+      return {
+        message: "Payment already verified",
+        ride_id: String(ride.id),
+        payment_status: "SUCCESS",
+        commission,
+        driver_amount: driverAmount,
+      };
+    }
+    throw new HttpError(409, "This payment was already used for another ride");
+  }
+
   if (ride.payment_status !== "PENDING") {
     throw new HttpError(400, "Payment verification is not allowed in current payment state");
   }
@@ -353,4 +398,94 @@ export const verifyPayment = async (customerIdInput: string | undefined, input: 
     commission,
     driver_amount: driverAmount,
   };
+};
+
+export const listCustomerPaymentHistory = async (customerIdInput?: string, limit = 50) => {
+  const customerId = ensureCustomerId(customerIdInput);
+  const payments = await PaymentModel.find({ customer_id: customerId })
+    .sort({ createdAt: -1 })
+    .limit(Math.min(limit, 100))
+    .lean();
+
+  return payments.map((p) => ({
+    payment_id: p.payment_id ?? null,
+    order_id: p.order_id,
+    ride_id: String(p.ride_id),
+    amount: p.amount,
+    status: p.status,
+    created_at: p.createdAt ?? null,
+    updated_at: p.updatedAt ?? null,
+  }));
+};
+
+export const listDriverPaymentHistory = async (driverIdInput?: string, limit = 50) => {
+  if (!driverIdInput) throw new HttpError(401, "Unauthorized");
+  const rides = await RideModel.find({
+    driver_id: driverIdInput,
+    payment_status: "SUCCESS",
+  })
+    .sort({ updatedAt: -1 })
+    .limit(Math.min(limit, 100))
+    .select("_id fare payment_mode payment_status updatedAt createdAt customer_id")
+    .lean();
+
+  return rides.map((ride) => ({
+    ride_id: String(ride._id),
+    amount: ride.fare,
+    payment_mode: ride.payment_mode ?? "CASH",
+    payment_status: ride.payment_status ?? "SUCCESS",
+    customer_id: String(ride.customer_id),
+    completed_at: ride.updatedAt ?? ride.createdAt ?? null,
+  }));
+};
+
+export const listAdminPaymentHistory = async (limit = 100) => {
+  const payments = await PaymentModel.find()
+    .sort({ createdAt: -1 })
+    .limit(Math.min(limit, 200))
+    .lean();
+
+  const rideIds = payments.map((p) => p.ride_id);
+  const rides = rideIds.length
+    ? await RideModel.find({ _id: { $in: rideIds } })
+        .select("driver_id customer_id fare payment_mode payment_status")
+        .lean()
+    : [];
+  const rideMap = new Map(rides.map((r) => [String(r._id), r]));
+
+  const userIds = [
+    ...new Set(
+      [
+        ...payments.map((p) => String(p.customer_id)),
+        ...rides.map((r) => (r.driver_id ? String(r.driver_id) : "")),
+      ].filter((id) => id.length > 0),
+    ),
+  ];
+  const users = userIds.length
+    ? await UserModel.find({ _id: { $in: userIds } }).select("name phone").lean()
+    : [];
+  const userMap = new Map(users.map((u) => [String(u._id), u]));
+
+  return payments.map((p) => {
+    const ride = rideMap.get(String(p.ride_id));
+    const customer = userMap.get(String(p.customer_id));
+    const driverId = ride?.driver_id ? String(ride.driver_id) : null;
+    const driver = driverId ? userMap.get(driverId) : undefined;
+    return {
+      payment_id: p.payment_id ?? null,
+      order_id: p.order_id,
+      ride_id: String(p.ride_id),
+      customer_id: String(p.customer_id),
+      customer_name: customer?.name ?? null,
+      customer_phone: customer?.phone ?? null,
+      driver_id: driverId,
+      driver_name: driver?.name ?? null,
+      driver_phone: driver?.phone ?? null,
+      amount: p.amount,
+      status: p.status,
+      payment_mode: ride?.payment_mode ?? null,
+      ride_payment_status: ride?.payment_status ?? null,
+      created_at: p.createdAt ?? null,
+    };
+  });
 };

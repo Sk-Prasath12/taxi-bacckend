@@ -1,31 +1,49 @@
 import { VehicleTypeModel } from "../src/modules/vehicle-type/vehicle-type.model";
+import { CANONICAL_VEHICLE_TYPES } from "../src/constants/vehicle-types.constants";
 import { Seed } from "./seed.types";
 
-/** Only these 4 types are shown to customers. */
-const CUSTOMER_VEHICLE_TYPES = [
-  { name: "Bike", per_km_rate: 10, max_passengers: 1 },
-  { name: "Auto", per_km_rate: 20, max_passengers: 3 },
-  { name: "Small 5 Seater Car", per_km_rate: 30, max_passengers: 5 },
-  { name: "Big 7 Seater Car", per_km_rate: 40, max_passengers: 7 },
-];
+async function upsertCanonicalVehicleType(vehicleType: (typeof CANONICAL_VEHICLE_TYPES)[number]) {
+  const existing =
+    (await VehicleTypeModel.findOne({ code: vehicleType.code })) ??
+    (await VehicleTypeModel.findOne({ name: vehicleType.name }));
 
-const run = async (): Promise<void> => {
-  const allowedNames = CUSTOMER_VEHICLE_TYPES.map((v) => v.name);
-
-  for (const vehicleType of CUSTOMER_VEHICLE_TYPES) {
-    await VehicleTypeModel.findOneAndUpdate(
-      { name: vehicleType.name },
-      { ...vehicleType, is_active: true },
-      { upsert: true, new: true }
-    );
+  if (existing) {
+    existing.code = vehicleType.code;
+    existing.name = vehicleType.name;
+    existing.per_km_rate = vehicleType.per_km_rate;
+    existing.max_passengers = vehicleType.max_passengers;
+    existing.is_active = true;
+    await existing.save();
+    return;
   }
 
+  await VehicleTypeModel.create({ ...vehicleType, is_active: true });
+}
+
+const run = async (): Promise<void> => {
+  const allowedCodes = CANONICAL_VEHICLE_TYPES.map((v) => v.code);
+  const allowedNames = CANONICAL_VEHICLE_TYPES.map((v) => v.name);
+
+  for (const vehicleType of CANONICAL_VEHICLE_TYPES) {
+    await upsertCanonicalVehicleType(vehicleType);
+  }
+
+  // Deactivate overlapping / legacy categories (Luxury, Hybrid, Van, old 5/7 Seater, etc.)
   await VehicleTypeModel.updateMany(
-    { name: { $nin: allowedNames } },
+    {
+      $or: [
+        { code: { $exists: true, $nin: allowedCodes } },
+        { code: { $in: [null, ""] }, name: { $nin: allowedNames } },
+        { code: { $exists: false }, name: { $nin: allowedNames } },
+      ],
+    },
     { $set: { is_active: false } }
   );
 
-  console.log("Customer vehicle types synced (Bike, Auto, Small 5 Seater, Big 7 Seater)");
+  console.log(
+    "Canonical vehicle types synced:",
+    CANONICAL_VEHICLE_TYPES.map((v) => `${v.code} (₹${v.per_km_rate}/km, ${v.max_passengers} seats)`).join(", ")
+  );
 };
 
 const seed: Seed = {

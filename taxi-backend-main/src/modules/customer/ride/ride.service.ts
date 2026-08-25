@@ -9,7 +9,7 @@ import { RideDocument, RideModel } from "./ride.model";
 import { joinRideRoomForUser } from "../../../socket/socket";
 import { dispatchNewRideToNearbyDrivers, emitToRoom } from "../../../socket/socket-emit.service";
 import { validateRideLocations } from "../../operational-zone/operational-zone.service";
-import { emitCustomerAndRide } from "../../../utils/ride-socket-events.util";
+import { emitCustomerAndRide, emitAdminRideUpdate } from "../../../utils/ride-socket-events.util";
 import { toFlexibleClientStatus } from "../../../utils/ride-emit.util";
 import { getNearbyDriverRadiusKm } from "../../../utils/nearby-drivers.util";
 import { expireSearchingRideIfNeeded } from "../../../utils/ride-search-timeout.util";
@@ -95,14 +95,14 @@ const customerObjectId = (customerId: string): Types.ObjectId => {
 
 const emitRideCancelledEvents = async (ride: RideDocument): Promise<void> => {
   const rideId = ride.id;
-  await emitToRoom("drivers", "ride_cancelled", { ride_id: rideId, status: "CANCELLED" });
-  await emitToRoom(`ride_${rideId}`, "ride_status_update", {
-    ride_id: rideId,
-    status: "CANCELLED",
-  });
-  await emitToRoom(`customer_${String(ride.customer_id)}`, "ride_status_update", {
-    ride_id: rideId,
-    status: "CANCELLED",
+  const payload = { ride_id: rideId, status: "CANCELLED" };
+  await emitToRoom("drivers", "ride_cancelled", payload);
+  await emitToRoom(`ride_${rideId}`, "ride_status_update", payload);
+  await emitToRoom(`customer_${String(ride.customer_id)}`, "ride_status_update", payload);
+  void emitAdminRideUpdate("ride_cancelled", {
+    ...payload,
+    customer_id: String(ride.customer_id),
+    driver_id: ride.driver_id ? String(ride.driver_id) : null,
   });
 };
 
@@ -431,6 +431,12 @@ export const confirmRide = async (
     otp: generatedOtp,
   });
   joinRideRoomForUser(customerId, ride.id);
+  void emitAdminRideUpdate("ride_created", {
+    ride_id: ride.id,
+    status: "SEARCHING_DRIVER",
+    ride: rideDetails,
+    nearby_drivers_notified: dispatchResult.targeted,
+  });
 
   if (dispatchResult.targeted === 0) {
     return {

@@ -8,7 +8,7 @@ export const getVehicleTypesController = async (
 ) => {
   try {
     const data = await getAllVehicleTypes();
-    return res.status(200).json(data);
+    return res.status(200).json({ data, vehicle_types: data });
   } catch (error) {
     return next(error);
   }
@@ -21,7 +21,7 @@ export const getActiveVehicleTypesController = async (
 ) => {
   try {
     const data = await getActiveVehicleTypes();
-    return res.status(200).json(data);
+    return res.status(200).json({ data, vehicle_types: data });
   } catch (error) {
     return next(error);
   }

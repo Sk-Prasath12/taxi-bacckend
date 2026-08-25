@@ -5,6 +5,10 @@ import { logger } from "../config/logger";
 import { RideModel } from "../modules/customer/ride/ride.model";
 import { UserModel } from "../modules/users/users.model";
 import { listOnlineDrivers, getOnlineDriver } from "../socket/ride-booking/ride-booking.store";
+import {
+  driverMatchesVehicleType,
+  getDriverVehicleTypeIdMap,
+} from "./driver-vehicle-type.util";
 
 export type GeoPoint = { lat: number; lng: number };
 
@@ -144,9 +148,18 @@ export const findNearbyEligibleDrivers = async (
     }
   }
 
-  return Array.from(seen.values()).sort(
+  let candidates = Array.from(seen.values()).sort(
     (a, b) => distanceMeters(pickup, a.location) - distanceMeters(pickup, b.location)
   );
+
+  if (options.vehicleTypeId && Types.ObjectId.isValid(options.vehicleTypeId)) {
+    const typeMap = await getDriverVehicleTypeIdMap(candidates.map((c) => c.driverId));
+    candidates = candidates.filter((c) =>
+      driverMatchesVehicleType(typeMap.get(c.driverId), options.vehicleTypeId)
+    );
+  }
+
+  return candidates;
 };
 
 export const getDriverLocationForMatching = async (
@@ -203,6 +216,7 @@ export const emitNewRideToNearbyDrivers = async (
         ride_id: payload.ride_id,
         pickup,
         rejected: normalizeRejected(options.rejectedDriverIds).length,
+        vehicleTypeId: options.vehicleTypeId ?? null,
         maxRadiusMeters: options.maxRadiusMeters ?? DEFAULT_RADIUS_M,
         maxRadiusKm: Number(((options.maxRadiusMeters ?? DEFAULT_RADIUS_M) / 1000).toFixed(2)),
       },

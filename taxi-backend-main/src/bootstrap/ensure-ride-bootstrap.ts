@@ -6,12 +6,7 @@ import { hashPassword } from "../utils/password.util";
 import { UserModel } from "../modules/users/users.model";
 import { DriverProfileModel } from "../modules/driver-profile/driver-profile.model";
 
-const CUSTOMER_VEHICLE_TYPES = [
-  { name: "Bike", per_km_rate: 10, max_passengers: 1 },
-  { name: "Auto", per_km_rate: 20, max_passengers: 3 },
-  { name: "Small 5 Seater Car", per_km_rate: 30, max_passengers: 5 },
-  { name: "Big 7 Seater Car", per_km_rate: 40, max_passengers: 7 },
-] as const;
+import { CANONICAL_VEHICLE_TYPES } from "../constants/vehicle-types.constants";
 
 const CHENNAI_ZONE_NAME = "Tamil Nadu Service Area";
 // Tamil Nadu service box (lng, lat) — matches customer app service bounds.
@@ -34,7 +29,9 @@ declare global {
 }
 
 async function ensureDummyDriver(): Promise<void> {
-  const car = await VehicleTypeModel.findOne({ name: "Small 5 Seater Car", is_active: true });
+  const car =
+    (await VehicleTypeModel.findOne({ code: "SEDAN", is_active: true })) ??
+    (await VehicleTypeModel.findOne({ code: "MINI", is_active: true }));
   if (!car) return;
 
   const passwordHash = await hashPassword(DUMMY_DRIVER_PASSWORD);
@@ -79,9 +76,9 @@ async function ensureDummyDriver(): Promise<void> {
         address: "Guindy, Chennai",
         license_number: "TN-DUMMY-001",
         vehicle_reg_number: "TN01DM9999",
-        vehicle_type_id: car._id,
-        vehicle_model: "Dzire",
+        vehicle_model: "Swift Dzire",
         vehicle_color: "White",
+        vehicle_type_id: car._id,
         aadhaar_number: "999999999999",
         pan_number: "DUMMY9999D",
         account_holder_name: "Dummy Driver",
@@ -95,18 +92,33 @@ async function ensureDummyDriver(): Promise<void> {
 }
 
 async function ensureRideBootstrapOnce(): Promise<void> {
-  const allowedNames = CUSTOMER_VEHICLE_TYPES.map((v) => v.name);
+  const allowedCodes = CANONICAL_VEHICLE_TYPES.map((v) => v.code);
+  const allowedNames = CANONICAL_VEHICLE_TYPES.map((v) => v.name);
 
-  for (const vehicleType of CUSTOMER_VEHICLE_TYPES) {
-    await VehicleTypeModel.findOneAndUpdate(
-      { name: vehicleType.name },
-      { ...vehicleType, is_active: true },
-      { upsert: true, new: true }
-    );
+  for (const vehicleType of CANONICAL_VEHICLE_TYPES) {
+    const existing =
+      (await VehicleTypeModel.findOne({ code: vehicleType.code })) ??
+      (await VehicleTypeModel.findOne({ name: vehicleType.name }));
+    if (existing) {
+      existing.code = vehicleType.code;
+      existing.name = vehicleType.name;
+      existing.per_km_rate = vehicleType.per_km_rate;
+      existing.max_passengers = vehicleType.max_passengers;
+      existing.is_active = true;
+      await existing.save();
+    } else {
+      await VehicleTypeModel.create({ ...vehicleType, is_active: true });
+    }
   }
 
   await VehicleTypeModel.updateMany(
-    { name: { $nin: allowedNames } },
+    {
+      $or: [
+        { code: { $exists: true, $nin: allowedCodes } },
+        { code: { $in: [null, ""] }, name: { $nin: allowedNames } },
+        { code: { $exists: false }, name: { $nin: allowedNames } },
+      ],
+    },
     { $set: { is_active: false } }
   );
 

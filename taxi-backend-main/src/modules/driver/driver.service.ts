@@ -6,12 +6,14 @@ import { generateAccessToken, generateRefreshToken, verifyRefreshToken } from ".
 import {
   ensureDriverReadyForOnline,
   getProfile,
+  createOrUpdateProfile,
 } from "../driver-profile/driver-profile.service";
 import { UserModel } from "../users/users.model";
 import { WalletModel } from "../finance/wallet.model";
 import { DriverDueModel } from "../finance/driver-due.model";
 import { RideModel } from "../customer/ride/ride.model";
 import { DriverOtpModel } from "./driver.otp.model";
+import { VehicleTypeModel } from "../vehicle-type/vehicle-type.model";
 
 const OTP_EXPIRY_MINUTES = 5;
 const OTP_PURPOSE_REGISTER = "REGISTER" as const;
@@ -337,6 +339,33 @@ export const refreshDriverAccessToken = async (refreshToken: string) => {
   };
 };
 
+const buildDriverVehicleSnapshot = async (driverId: string) => {
+  const profile = await getProfile(driverId);
+  let vehicleTypeName: string | null = null;
+  if (profile?.vehicle_type_id) {
+    const vt = await VehicleTypeModel.findById(profile.vehicle_type_id).select("name code").lean();
+    vehicleTypeName = vt?.name ?? null;
+  }
+
+  const model = profile?.vehicle_model?.trim() || null;
+  const number = profile?.vehicle_reg_number?.trim() || null;
+  const isPlaceholderNumber = !number || number.toUpperCase() === "PENDING";
+  const vehicleSetupComplete =
+    Boolean(model && model.length >= 2 && number && number.length >= 4 && !isPlaceholderNumber);
+
+  return {
+    profile,
+    vehicle_model: model,
+    vehicle_number: isPlaceholderNumber ? null : number,
+    vehicle_reg_number: isPlaceholderNumber ? null : number,
+    vehicle_type_id: profile?.vehicle_type_id ?? null,
+    vehicle_type: vehicleTypeName,
+    vehicle_color: profile?.vehicle_color ?? null,
+    vehicle_setup_complete: vehicleSetupComplete,
+    profile_completed: profile?.profile_completed === true,
+  };
+};
+
 export const loginDriver = async (email: string, password: string) => {
   const normalizedEmail = email.toLowerCase().trim();
   const driver = await UserModel.findOne({ email: normalizedEmail, role: "DRIVER" });
@@ -361,6 +390,8 @@ export const loginDriver = async (email: string, password: string) => {
     await ensureDriverReadyForOnline(driver.id).catch(() => undefined);
   }
 
+  const vehicle = await buildDriverVehicleSnapshot(driver.id);
+
   return {
     success: true,
     message: "Login successful",
@@ -377,6 +408,22 @@ export const loginDriver = async (email: string, password: string) => {
       blocked_reason: driver.blocked_reason ?? null,
       is_driver_verified: driver.is_driver_verified === true,
       driver_verification_status: driver.driver_verification_status ?? "PENDING",
+      vehicle_model: vehicle.vehicle_model,
+      vehicle_number: vehicle.vehicle_number,
+      vehicle_reg_number: vehicle.vehicle_reg_number,
+      vehicle_type_id: vehicle.vehicle_type_id,
+      vehicle_type: vehicle.vehicle_type,
+      vehicle_color: vehicle.vehicle_color,
+      vehicle_setup_complete: vehicle.vehicle_setup_complete,
+      profile_completed: vehicle.profile_completed,
+      vehicleDetails: vehicle.vehicle_setup_complete
+        ? {
+            model: vehicle.vehicle_model,
+            plateNumber: vehicle.vehicle_number,
+            type: vehicle.vehicle_type,
+            color: vehicle.vehicle_color,
+          }
+        : null,
     },
   };
 };
@@ -396,20 +443,117 @@ const findDriverByUserId = async (userId: string | undefined) => {
 
 export const getDriverProfile = async (userId: string | undefined) => {
   const driver = await findDriverByUserId(userId);
-  const profile = await getProfile(driver.id);
+  const vehicle = await buildDriverVehicleSnapshot(driver.id);
 
   return {
     id: driver.id,
     name: driver.name,
     email: driver.email,
-    phone: driver.phone ?? null,
+    phone: driver.phone ?? vehicle.profile?.phone ?? null,
     role: "driver",
     status: driver.driver_status ?? "OFFLINE",
     is_active: driver.is_active,
     is_blocked: driver.is_blocked,
     is_driver_verified: driver.is_driver_verified === true,
     driver_verification_status: driver.driver_verification_status ?? "PENDING",
-    profile_completed: profile?.profile_completed === true,
+    profile_completed: vehicle.profile_completed,
+    vehicle_model: vehicle.vehicle_model,
+    vehicle_number: vehicle.vehicle_number,
+    vehicle_reg_number: vehicle.vehicle_reg_number,
+    vehicle_type_id: vehicle.vehicle_type_id,
+    vehicle_type: vehicle.vehicle_type,
+    vehicle_color: vehicle.vehicle_color,
+    vehicle_setup_complete: vehicle.vehicle_setup_complete,
+    vehicleDetails: vehicle.vehicle_setup_complete
+      ? {
+          model: vehicle.vehicle_model,
+          plateNumber: vehicle.vehicle_number,
+          type: vehicle.vehicle_type,
+          color: vehicle.vehicle_color,
+        }
+      : null,
+  };
+};
+
+export const updateDriverVehicle = async (
+  userId: string | undefined,
+  payload: {
+    model?: string;
+    vehicle_model?: string;
+    plateNumber?: string;
+    vehicle_number?: string;
+    vehicle_reg_number?: string;
+    vehicle_type_id?: string;
+    type?: string;
+    vehicle_type?: string;
+    color?: string;
+    vehicle_color?: string;
+  }
+) => {
+  const driver = await findDriverByUserId(userId);
+
+  const model = (payload.vehicle_model ?? payload.model ?? "").trim();
+  const number = (
+    payload.vehicle_reg_number ??
+    payload.vehicle_number ??
+    payload.plateNumber ??
+    ""
+  )
+    .trim()
+    .toUpperCase();
+
+  if (model.length < 2) {
+    throw new HttpError(400, "Enter vehicle model");
+  }
+  if (number.length < 4) {
+    throw new HttpError(400, "Enter vehicle number / plate");
+  }
+
+  let vehicleTypeId = payload.vehicle_type_id?.trim() || undefined;
+  if (!vehicleTypeId) {
+    const typeName = (payload.vehicle_type ?? payload.type ?? "").trim();
+    if (typeName) {
+      const vt =
+        (await VehicleTypeModel.findOne({
+          name: new RegExp(`^${typeName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i"),
+          is_active: true,
+        }).lean()) ??
+        (await VehicleTypeModel.findOne({
+          code: typeName.toUpperCase().replace(/\s+/g, "_"),
+          is_active: true,
+        }).lean());
+      if (vt?._id) vehicleTypeId = String(vt._id);
+    }
+  }
+
+  const updated = await createOrUpdateProfile(driver.id, {
+    vehicle_model: model,
+    vehicle_reg_number: number,
+    vehicle_color: (payload.vehicle_color ?? payload.color)?.trim() || undefined,
+    vehicle_type_id: vehicleTypeId,
+  });
+
+  const vehicle = await buildDriverVehicleSnapshot(driver.id);
+
+  return {
+    success: true,
+    message: "Vehicle saved",
+    driver: {
+      id: driver.id,
+      name: driver.name,
+      email: driver.email,
+      phone: driver.phone ?? null,
+      is_driver_verified: driver.is_driver_verified === true,
+      driver_verification_status: driver.driver_verification_status ?? "PENDING",
+      ...vehicle,
+      vehicleDetails: {
+        model: vehicle.vehicle_model,
+        plateNumber: vehicle.vehicle_number,
+        type: vehicle.vehicle_type,
+        color: vehicle.vehicle_color,
+      },
+    },
+    profile: updated,
   };
 };
 

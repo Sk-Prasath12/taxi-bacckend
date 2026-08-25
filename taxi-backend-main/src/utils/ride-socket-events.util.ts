@@ -1,4 +1,5 @@
 import { emitToCustomer, emitToRide } from "../socket/socket";
+import { emitToRoom } from "../socket/socket-emit.service";
 
 type EmitPayload = Record<string, unknown>;
 
@@ -38,4 +39,10 @@ export const emitCustomerAndRide = (
 ) => {
   emitToCustomer(customerId, event, payload);
   emitToRide(rideId, event, payload);
+};
+
+/** Broadcast ride lifecycle updates to connected admin dashboards. */
+export const emitAdminRideUpdate = async (event: string, payload: EmitPayload) => {
+  await emitToRoom("admins", event, payload);
+  await emitToRoom("admins", "ride_status_update", payload);
 };

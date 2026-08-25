@@ -12,7 +12,7 @@ import { registerRideBookingHandlers } from "./ride-booking/ride-booking.handler
 import { persistUserLocation } from "../utils/driver-location-persist.util";
 import { forwardSocketBridge } from "./socket-bridge.client";
 
-type SocketRole = "customer" | "driver";
+type SocketRole = "customer" | "driver" | "admin" | "ADMIN";
 
 type JoinPayload = {
   userId?: string;
@@ -213,6 +213,12 @@ const handleJoinEvent = (socket: Socket) => {
       if (payload.rideId) {
         joinRideRoom(socket, payload.rideId);
       }
+    }
+
+    const roleKey = String(role).toUpperCase();
+    if (roleKey === "ADMIN") {
+      socket.join("admins");
+      logger.info(`admin joined: ${userId}`);
     }
 
     if (role !== "customer") {

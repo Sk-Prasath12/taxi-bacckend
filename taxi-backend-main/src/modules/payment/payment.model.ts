@@ -33,6 +33,11 @@ const paymentSchema = new Schema<PaymentEntity>(
 
 paymentSchema.index({ customer_id: 1, createdAt: -1 });
 paymentSchema.index({ ride_id: 1, status: 1 });
+/** Same Razorpay payment_id must not create duplicate success records. */
+paymentSchema.index(
+  { payment_id: 1 },
+  { unique: true, sparse: true, partialFilterExpression: { payment_id: { $type: "string" } } }
+);
 
 export const PaymentModel = model<PaymentEntity>("Payment", paymentSchema);
 

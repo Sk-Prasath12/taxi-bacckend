@@ -20,6 +20,7 @@ import {
 import { assertRideTransition } from "./ride-booking.state";
 import { persistUserLocation } from "../../utils/driver-location-persist.util";
 import { UserModel } from "../../modules/users/users.model";
+import { acceptIncomingRide } from "../../modules/driver/ride/driver-ride.service";
 import {
   DriverOnlinePayload,
   RideAcceptPayload,
@@ -169,47 +170,12 @@ export const registerRideBookingHandlers = (io: Server, socket: SocketWithIdenti
     }
   });
 
-  socket.on("ride:request", async (payload: RideRequestPayload) => {
+  socket.on("ride:request", async (_payload: RideRequestPayload) => {
     try {
-      const identity = ensureCustomerIdentity(extractIdentity(socket));
-
-      if (!isCoordinate(payload?.pickup) || !isCoordinate(payload?.drop)) {
-        throw new HttpError(400, "Invalid pickup or drop location");
-      }
-
-      const customerId = payload.customerId ?? identity.userId;
-      if (customerId !== identity.userId) {
-        throw new HttpError(403, "customerId does not match authenticated customer");
-      }
-
-      const ride = await createSocketRideRequest({
-        customerId,
-        pickup: payload.pickup,
-        drop: payload.drop,
-      });
-      const rideId = String(ride._id);
-      socket.join(roomCustomer(customerId));
-      socket.join(roomRide(rideId));
-
-      upsertActiveRide({
-        rideId,
-        customerId,
-        driverId: null,
-        status: "SEARCHING_DRIVER",
-      });
-
-      const eventPayload = {
-        rideId,
-        ride_id: rideId,
-        customerId,
-        pickup: payload.pickup,
-        drop: payload.drop,
-        status: "SEARCHING_DRIVER",
-      };
-
-      await emitNewRideToNearbyDrivers(io, payload.pickup, eventPayload);
-
-      socket.emit("ride:requested", { rideId, status: "SEARCHING_DRIVER" });
+      throw new HttpError(
+        400,
+        "Use REST API POST /api/customers/rides/request then /confirm for booking (vehicle type + fare required)."
+      );
     } catch (error) {
       logger.error({ error, socketId: socket.id }, "ride:request failed");
       emitSocketError(socket, error);
@@ -227,41 +193,28 @@ export const registerRideBookingHandlers = (io: Server, socket: SocketWithIdenti
       if (driverId !== identity.userId) {
         throw new HttpError(403, "driverId does not match authenticated driver");
       }
-      if (!getOnlineDriver(driverId)) {
-        throw new HttpError(409, "Driver is not online");
-      }
 
-      const ride = await acceptRideAtomically(payload.rideId, driverId);
-      emitRideUnavailableToDrivers(io, payload.rideId);
-      const active = getActiveRide(payload.rideId);
-      const customerId = active?.customerId ?? String(ride.customer_id);
+      const result = await acceptIncomingRide(driverId, payload.rideId);
+      const rideId = payload.rideId;
+      const active = getActiveRide(rideId);
+      const customerId = active?.customerId ?? "";
 
       upsertActiveRide({
-        rideId: payload.rideId,
+        rideId,
         customerId,
         driverId,
         status: "DRIVER_ASSIGNED",
       });
 
-      socket.join(roomRide(payload.rideId));
-      io.to(roomCustomer(customerId)).emit("ride:accepted", {
-        rideId: payload.rideId,
-        ride_id: payload.rideId,
-        driverId,
-        status: "ACCEPTED",
-      });
-      io.to(roomCustomer(customerId)).emit("ride_accepted", {
-        rideId: payload.rideId,
-        ride_id: payload.rideId,
-        driverId,
-        status: "ACCEPTED",
-      });
+      socket.join(roomRide(rideId));
       io.to(roomDriver(driverId)).emit("ride:accept:ack", {
-        rideId: payload.rideId,
-        status: "DRIVER_ASSIGNED",
+        rideId,
+        ride_id: rideId,
+        status: result.status,
+        success: true,
       });
 
-      logger.info({ rideId: payload.rideId, driverId, customerId }, "Ride accepted");
+      logger.info({ rideId, driverId, customerId }, "Ride accepted via REST rules");
     } catch (error) {
       logger.warn({ error, socketId: socket.id, payload }, "ride:accept failed");
       emitSocketError(socket, error);
