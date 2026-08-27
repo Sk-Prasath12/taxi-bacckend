@@ -65,7 +65,14 @@ const finalizeOnlinePaymentSuccess = async (ride: RideDocument) => {
 
   if (shouldCompleteRide) {
     ride.status = "COMPLETED";
+    ride.completed_at = new Date();
     await ride.save();
+    if (ride.driver_id) {
+      await UserModel.updateOne(
+        { _id: ride.driver_id, role: "DRIVER" },
+        { $set: { driver_status: "ONLINE" } }
+      );
+    }
     console.log(`AUTO-COMPLETE RIDE ${rideId} after Razorpay payment`);
   }
 
@@ -273,13 +280,13 @@ export const verifyPayment = async (customerIdInput: string | undefined, input: 
     throw new HttpError(400, "Payment is allowed only for ONLINE rides");
   }
   if (ride.payment_status === "SUCCESS") {
-    const { commission, driverAmount } = calculateCommission(ride.fare);
+    const finalized = await finalizeOnlinePaymentSuccess(ride);
     return {
       message: "Payment verified successfully",
       ride_id: String(ride.id),
       payment_status: "SUCCESS",
-      commission,
-      driver_amount: driverAmount,
+      commission: finalized.commission,
+      driver_amount: finalized.driverAmount,
     };
   }
 
@@ -292,13 +299,13 @@ export const verifyPayment = async (customerIdInput: string | undefined, input: 
     if (String(existingByPaymentId.ride_id) === String(ride._id)) {
       ride.payment_status = "SUCCESS";
       await ride.save();
-      const { commission, driverAmount } = calculateCommission(ride.fare);
+      const finalized = await finalizeOnlinePaymentSuccess(ride);
       return {
         message: "Payment already verified",
         ride_id: String(ride.id),
         payment_status: "SUCCESS",
-        commission,
-        driver_amount: driverAmount,
+        commission: finalized.commission,
+        driver_amount: finalized.driverAmount,
       };
     }
     throw new HttpError(409, "This payment was already used for another ride");

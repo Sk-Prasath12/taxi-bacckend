@@ -12,6 +12,7 @@ import {
   getRideInvoiceController,
   getRideStatusController,
   requestRideController,
+  triggerRideEmergencyController,
 } from "./ride.controller";
 import { confirmRideSchema, requestRideSchema, rideIdParamSchema } from "./ride.validator";
 
@@ -45,6 +46,11 @@ customerRideRouter.get(
   "/api/customers/rides/:rideId/invoice",
   validate(rideIdParamSchema),
   getRideInvoiceController
+);
+customerRideRouter.post(
+  "/api/customers/rides/:rideId/emergency",
+  validate(rideIdParamSchema),
+  triggerRideEmergencyController
 );
 
 export default customerRideRouter;

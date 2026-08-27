@@ -97,7 +97,18 @@ export const listAdminLiveRides = async () => {
         : null,
       created_at: ride.createdAt ?? null,
       updated_at: ride.updatedAt ?? null,
+      createdAt: ride.createdAt ?? null,
+      updatedAt: ride.updatedAt ?? null,
       trip_started_at: (ride as { trip_started_at?: Date }).trip_started_at ?? null,
+      completed_at:
+        (ride as { completed_at?: Date }).completed_at ??
+        (ride.status === "COMPLETED" ? ride.updatedAt ?? null : null),
+      finance_processed: Boolean((ride as { finance_processed?: boolean }).finance_processed),
+      actual_distance_km: (ride as { actual_distance_km?: number }).actual_distance_km ?? null,
+      actual_duration_min: (ride as { actual_duration_min?: number }).actual_duration_min ?? null,
+      emergency_alerted: Boolean((ride as { emergency_alerted?: boolean }).emergency_alerted),
+      emergency_at: (ride as { emergency_at?: Date }).emergency_at ?? null,
+      emergency_location: (ride as { emergency_location?: unknown }).emergency_location ?? null,
     };
   });
 };
@@ -187,8 +198,17 @@ export const listAdminRideHistory = async (options: {
         : null,
       created_at: ride.createdAt ?? null,
       updated_at: ride.updatedAt ?? null,
+      createdAt: ride.createdAt ?? null,
+      updatedAt: ride.updatedAt ?? null,
       trip_started_at: (ride as { trip_started_at?: Date }).trip_started_at ?? null,
-      completed_at: ride.status === "COMPLETED" ? ride.updatedAt ?? null : null,
+      completed_at:
+        (ride as { completed_at?: Date }).completed_at ??
+        (ride.status === "COMPLETED" ? ride.updatedAt ?? null : null),
+      finance_processed: Boolean((ride as { finance_processed?: boolean }).finance_processed),
+      actual_distance_km: (ride as { actual_distance_km?: number }).actual_distance_km ?? null,
+      actual_duration_min: (ride as { actual_duration_min?: number }).actual_duration_min ?? null,
+      emergency_alerted: Boolean((ride as { emergency_alerted?: boolean }).emergency_alerted),
+      emergency_at: (ride as { emergency_at?: Date }).emergency_at ?? null,
     };
   });
 };

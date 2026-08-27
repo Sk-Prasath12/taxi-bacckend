@@ -50,12 +50,23 @@ export const processRidePayment = async (rideInput: RideDocument) => {
     await emitToRoom(`driver_${String(ride.driver_id)}`, "driver_wallet_updated", {
       ride_id: String(ride.id),
       amount: driverAmount,
+      payment_mode: "ONLINE",
+      finance_processed: true,
     });
     await emitToRoom(`driver_${String(ride.driver_id)}`, "wallet_updated", {
       amount: driverAmount,
+      payment_mode: "ONLINE",
     });
     return;
   }
+
+  // CASH: driver keeps fare in hand; platform commission becomes due.
+  // Still track net earnings on wallet.total_earned so history/earnings UI stays accurate.
+  await WalletModel.findOneAndUpdate(
+    { user_id: ride.driver_id },
+    { $inc: { total_earned: driverAmount } },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
 
   await DriverDueModel.findOneAndUpdate(
     { driver_id: ride.driver_id },
@@ -72,6 +83,12 @@ export const processRidePayment = async (rideInput: RideDocument) => {
   await emitToRoom(`driver_${String(ride.driver_id)}`, "driver_due_updated", {
     ride_id: String(ride.id),
     due_amount: commission,
+  });
+  await emitToRoom(`driver_${String(ride.driver_id)}`, "driver_wallet_updated", {
+    ride_id: String(ride.id),
+    amount: driverAmount,
+    payment_mode: "CASH",
+    finance_processed: true,
   });
 };
 

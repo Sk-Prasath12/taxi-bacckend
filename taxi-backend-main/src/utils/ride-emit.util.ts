@@ -83,9 +83,16 @@ export const buildRideEmitPayload = async (ride: RideDocument) => {
     drop_otp_verified: Boolean(extended.drop_otp_verified),
     drop_reached: Boolean(extended.drop_reached),
     trip_started_at: extended.trip_started_at ?? null,
+    finance_processed: Boolean(ride.finance_processed),
+    completed_at: ride.completed_at ?? (ride.status === "COMPLETED" ? ride.updatedAt ?? null : null),
+    emergency_alerted: Boolean(ride.emergency_alerted),
+    emergency_at: ride.emergency_at ?? null,
+    emergency_location: ride.emergency_location ?? null,
     driver,
     customer,
     createdAt: ride.createdAt,
     updatedAt: ride.updatedAt,
+    created_at: ride.createdAt ?? null,
+    updated_at: ride.updatedAt ?? null,
   };
 };

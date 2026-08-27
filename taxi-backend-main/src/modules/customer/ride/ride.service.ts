@@ -172,6 +172,11 @@ const mapRideDetails = async (ride: RideDocument) => {
     actual_drop: ride.actual_drop ?? null,
     actual_distance_km: ride.actual_distance_km ?? null,
     actual_duration_min: ride.actual_duration_min ?? null,
+    finance_processed: Boolean(ride.finance_processed),
+    completed_at: ride.completed_at ?? (ride.status === "COMPLETED" ? ride.updatedAt ?? null : null),
+    emergency_alerted: Boolean(ride.emergency_alerted),
+    emergency_at: ride.emergency_at ?? null,
+    emergency_location: ride.emergency_location ?? null,
     driver,
     createdAt: ride.createdAt,
     updatedAt: ride.updatedAt,
@@ -557,11 +562,72 @@ export const getRideHistoryById = async (
   if (!ride) {
     throw new HttpError(404, "Ride not found");
   }
+  if (String(ride.customer_id) !== customerId) {
+    throw new HttpError(403, "You are not allowed to view this ride");
+  }
 
-  ensureRideOwnership(ride, customerId);
+  return { ride: await mapRideDetails(ride) };
+};
+
+export const triggerRideEmergency = async (
+  customerIdInput: string | undefined,
+  rideIdInput: string | undefined,
+  location?: { lat?: number; lng?: number; address?: string }
+) => {
+  const customerId = ensureCustomerId(customerIdInput);
+  const rideId = ensureRideId(rideIdInput);
+  const ride = await RideModel.findById(rideId);
+  if (!ride) {
+    throw new HttpError(404, "Ride not found");
+  }
+  if (String(ride.customer_id) !== customerId) {
+    throw new HttpError(403, "You are not allowed to alert for this ride");
+  }
+  if (ride.status === "COMPLETED" || ride.status === "CANCELLED") {
+    throw new HttpError(400, "Cannot raise emergency on a finished ride");
+  }
+
+  ride.emergency_alerted = true;
+  ride.emergency_at = new Date();
+  if (
+    typeof location?.lat === "number" &&
+    typeof location?.lng === "number" &&
+    Number.isFinite(location.lat) &&
+    Number.isFinite(location.lng)
+  ) {
+    ride.emergency_location = {
+      lat: location.lat,
+      lng: location.lng,
+      address: typeof location.address === "string" ? location.address : "",
+    };
+  }
+  await ride.save();
+
+  const payload = {
+    ride_id: ride.id,
+    status: ride.status,
+    customer_id: customerId,
+    driver_id: ride.driver_id ? String(ride.driver_id) : null,
+    emergency_alerted: true,
+    emergency_at: ride.emergency_at,
+    emergency_location: ride.emergency_location ?? null,
+    pickup: ride.pickup,
+    drop: ride.drop,
+  };
+
+  void emitAdminRideUpdate("emergency_alert", payload);
+  emitCustomerAndRide(customerId, ride.id, "emergency_alert", payload);
+  if (ride.driver_id) {
+    emitCustomerAndRide(String(ride.driver_id), ride.id, "emergency_alert", payload);
+  }
+
+  logger.warn({ ride_id: ride.id, customer_id: customerId }, "Customer emergency alert raised");
 
   return {
-    ride: await mapRideDetails(ride),
+    message: "Emergency alert sent to admin and driver",
+    ride_id: ride.id,
+    emergency_alerted: true,
+    emergency_at: ride.emergency_at,
   };
 };
 

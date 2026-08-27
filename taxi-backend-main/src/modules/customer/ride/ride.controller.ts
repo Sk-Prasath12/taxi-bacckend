@@ -9,6 +9,7 @@ import {
   getRideHistory,
   getRideStatus,
   requestRide,
+  triggerRideEmergency,
 } from "./ride.service";
 
 export const requestRideController = async (req: Request, res: Response, next: NextFunction) => {
@@ -135,6 +136,24 @@ export const getRideInvoiceController = async (
   try {
     const rideId = Array.isArray(req.params.rideId) ? req.params.rideId[0] : req.params.rideId;
     const data = await getCustomerRideInvoice(req.authUser?.userId, rideId);
+    return res.status(200).json(data);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const triggerRideEmergencyController = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const rideId = Array.isArray(req.params.rideId) ? req.params.rideId[0] : req.params.rideId;
+    const data = await triggerRideEmergency(req.authUser?.userId, rideId, {
+      lat: typeof req.body?.lat === "number" ? req.body.lat : undefined,
+      lng: typeof req.body?.lng === "number" ? req.body.lng : undefined,
+      address: typeof req.body?.address === "string" ? req.body.address : undefined,
+    });
     return res.status(200).json(data);
   } catch (error) {
     return next(error);

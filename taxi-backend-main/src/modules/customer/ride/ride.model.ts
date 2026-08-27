@@ -43,6 +43,10 @@ export type RideEntity = {
   payment_mode?: PaymentMode;
   payment_status?: PaymentStatus;
   finance_processed?: boolean;
+  completed_at?: Date;
+  emergency_alerted?: boolean;
+  emergency_at?: Date;
+  emergency_location?: { lat: number; lng: number; address?: string };
   otp: number;
   otp_verified: boolean;
   drop_otp?: number;
@@ -88,6 +92,20 @@ const rideSchema = new Schema<RideEntity>(
     payment_mode: { type: String, enum: PAYMENT_MODES, default: "CASH" },
     payment_status: { type: String, enum: PAYMENT_STATUSES, default: "PENDING" },
     finance_processed: { type: Boolean, default: false },
+    completed_at: { type: Date, default: undefined },
+    emergency_alerted: { type: Boolean, default: false },
+    emergency_at: { type: Date, default: undefined },
+    emergency_location: {
+      type: new Schema(
+        {
+          lat: { type: Number, required: true },
+          lng: { type: Number, required: true },
+          address: { type: String, default: "" },
+        },
+        { _id: false }
+      ),
+      default: undefined,
+    },
     otp: { type: Number, required: true, min: 1000, max: 9999, default: 1000 },
     otp_verified: { type: Boolean, default: false },
     drop_otp: { type: Number, default: undefined, min: 1000, max: 9999 },

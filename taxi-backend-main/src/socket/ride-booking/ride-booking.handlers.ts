@@ -302,11 +302,16 @@ export const registerRideBookingHandlers = (io: Server, socket: SocketWithIdenti
     }
   });
 
+  // Do not mark COMPLETED over socket — skips drop OTP, payment, wallet, and invoice.
+  // Drivers must use REST: verify-drop-otp → cash-received / online pay → /complete.
   socket.on("ride:end", async (payload: RideLifecyclePayload) => {
     try {
-      await onRideStatusEvent(payload, "STARTED", "COMPLETED", "ride:end");
+      throw new HttpError(
+        400,
+        "Use REST ride completion (drop OTP + payment + /complete). Socket ride:end is disabled."
+      );
     } catch (error) {
-      logger.warn({ error, socketId: socket.id, payload }, "ride:end failed");
+      logger.warn({ error, socketId: socket.id, payload }, "ride:end rejected — use REST complete");
       emitSocketError(socket, error);
     }
   });

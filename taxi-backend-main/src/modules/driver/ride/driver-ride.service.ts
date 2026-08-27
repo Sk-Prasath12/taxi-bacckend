@@ -176,6 +176,7 @@ const finalizeCompletedRide = async (ride: RideDocument) => {
     ride.payment_status = "SUCCESS";
   }
   ride.status = "COMPLETED";
+  ride.completed_at = new Date();
   await ride.save();
 
   if (ride.driver_id) {
@@ -216,6 +217,18 @@ const finalizeCompletedRide = async (ride: RideDocument) => {
     actual_distance_km: ride.actual_distance_km,
     actual_duration_min: ride.actual_duration_min,
     payment_status: ride.payment_status,
+    payment_mode: ride.payment_mode,
+    finance_processed: Boolean(ride.finance_processed),
+  });
+  void emitAdminRideUpdate("ride_completed", {
+    ride_id: ride.id,
+    status: "COMPLETED",
+    fare: ride.fare,
+    payment_status: ride.payment_status,
+    payment_mode: ride.payment_mode,
+    customer_id: customerId,
+    driver_id: ride.driver_id ? String(ride.driver_id) : null,
+    finance_processed: Boolean(ride.finance_processed),
   });
   await sendRideStatusPush(
     customerId,
@@ -844,6 +857,15 @@ export const confirmCashReceived = async (driverIdInput: string | undefined, rid
     throw new HttpError(400, "This ride is not a cash payment ride");
   }
 
+  if (ride.status === "COMPLETED" && ride.payment_status === "SUCCESS") {
+    return {
+      message: "Cash payment already recorded and ride completed",
+      ride_id: ride.id,
+      status: ride.status,
+      payment_status: ride.payment_status,
+    };
+  }
+
   ride.payment_status = "SUCCESS";
   await ride.save();
 
@@ -855,10 +877,24 @@ export const confirmCashReceived = async (driverIdInput: string | undefined, rid
     fare: ride.fare,
   });
 
+  // Complete + wallet/dues/invoice in one step so history and finance always persist.
+  if (ride.status !== "COMPLETED") {
+    await finalizeCompletedRide(ride);
+  } else {
+    try {
+      await processRidePayment(ride);
+      await generateInvoice(ride);
+    } catch (error) {
+      logger.error({ error, ride_id: ride.id }, "Cash finance after already-completed ride failed");
+    }
+  }
+
   return {
-    message: "Cash payment recorded",
+    message: "Cash payment recorded and ride completed",
     ride_id: ride.id,
-    payment_status: ride.payment_status,
+    status: "COMPLETED",
+    payment_status: "SUCCESS",
+    fare: ride.fare,
   };
 };
 
@@ -960,11 +996,19 @@ export const getDriverRideHistory = async (driverIdInput: string | undefined) =>
         status: ride.status,
         pickup: ride.pickup,
         drop: ride.drop,
+        actual_drop: ride.actual_drop ?? null,
         distance_km: ride.distance_km,
+        actual_distance_km: ride.actual_distance_km ?? null,
         duration_min: ride.duration_min ?? null,
+        actual_duration_min: ride.actual_duration_min ?? null,
         fare: ride.fare,
         payment_mode: ride.payment_mode ?? "CASH",
         payment_status: ride.payment_status ?? "PENDING",
+        finance_processed: Boolean(ride.finance_processed),
+        vehicle_type_id: ride.vehicle_type_id ? String(ride.vehicle_type_id) : null,
+        drop_reached: Boolean(
+          (ride as RideDocument & { drop_reached?: boolean }).drop_reached
+        ),
         drop_otp_verified: Boolean(
           (ride as RideDocument & { drop_otp_verified?: boolean }).drop_otp_verified
         ),
@@ -978,6 +1022,12 @@ export const getDriverRideHistory = async (driverIdInput: string | undefined) =>
           : null,
         createdAt: ride.createdAt,
         updatedAt: ride.updatedAt,
+        completed_at:
+          ride.status === "COMPLETED"
+            ? (ride as RideDocument & { completed_at?: Date }).completed_at ??
+              ride.updatedAt ??
+              null
+            : null,
       };
     })
   );
@@ -1018,10 +1068,28 @@ export const updateRideStatusByDriver = async (
   ensureRideBelongsToDriver(ride, driver.id);
 
   const nextStatus = normalizeStatusAlias(statusInput);
-  ride.status = nextStatus;
-  if (nextStatus === "COMPLETED" && ride.payment_mode === "CASH") {
-    ride.payment_status = "SUCCESS";
+  if (nextStatus === "COMPLETED") {
+    if (!ride.drop_otp_verified) {
+      throw new HttpError(400, "Drop OTP must be verified before completing ride");
+    }
+    if (ride.payment_mode === "ONLINE" && ride.payment_status !== "SUCCESS") {
+      throw new HttpError(400, "Online payment must be successful before completing ride");
+    }
+    if (ride.status !== "COMPLETED") {
+      if (ride.payment_mode === "CASH") {
+        ride.payment_status = "SUCCESS";
+      }
+      await finalizeCompletedRide(ride);
+    }
+    return {
+      message: "Ride completed successfully",
+      ride_id: ride.id,
+      status: "COMPLETED",
+      payment_status: ride.payment_status,
+    };
   }
+
+  ride.status = nextStatus;
   await ride.save();
 
   const statusForClient = toClientStatus(ride.status);

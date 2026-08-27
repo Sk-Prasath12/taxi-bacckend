@@ -26,6 +26,10 @@ import {
   verifyOtpSchema,
 } from "./customer.validator";
 import customerRideRouter from "./ride/ride.routes";
+import {
+  getCustomerWalletBalanceController,
+  getCustomerWalletTransactionsController,
+} from "./wallet/customer-wallet.controller";
 
 const customerRouter = Router();
 
@@ -70,6 +74,20 @@ customerRouter.patch(
   requireRole(["CUSTOMER"]),
   validate(updateCustomerProfileSchema),
   customerUpdateProfileController
+);
+
+customerRouter.get(
+  "/api/customers/wallet/balance",
+  requireAuth,
+  requireRole(["CUSTOMER"]),
+  getCustomerWalletBalanceController
+);
+
+customerRouter.get(
+  "/api/customers/wallet/transactions",
+  requireAuth,
+  requireRole(["CUSTOMER"]),
+  getCustomerWalletTransactionsController
 );
 
 customerRouter.post(
