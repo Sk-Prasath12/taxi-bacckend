@@ -12,6 +12,19 @@ osrm-data.zip
 
 # IDE / tools
 .qoder/
+.idea/
+.vscode/
+
+# Flutter / mobile build artifacts
+**/.dart_tool/
+**/build/
+**/.gradle/
+**/android/.gradle/
+**/ios/Pods/
+**/.flutter-plugins-dependencies
+
+# Vercel
+**/.vercel/
 
 # OS
 Thumbs.db

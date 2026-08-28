@@ -1,0 +1,106 @@
+# Driver API flow — run AFTER customer Request Ride + Confirm Ride
+# Easiest: use e2e-ride-flow.http (auto-chains ride_id + OTP from customer steps)
+#
+# Manual mode: copy ride_id and OTP from customer Confirm Ride response into:
+#   @rideId / @rideOtp below
+#
+# Driver must be verified (is_driver_verified=true) or accept returns 403.
+
+@baseUrl = http://localhost:3000
+@driverEmail = sridharshini@yopmail.com
+@driverPassword =sri@123456 
+@rideId = 6a072c4ad1dd1cbc1ea301d1
+@rideOtp = 9918
+@dropOtp = 0000
+### Driver Login
+# @name driverLogin
+POST {{baseUrl}}/api/drivers/login
+Content-Type: application/json
+
+{
+  "email": "{{driverEmail}}",
+  "password": "{{driverPassword}}"
+}
+
+### Incoming Rides (within ~10 km — use coords near pickup)
+GET {{baseUrl}}/api/drivers/rides/incoming?lat=12.976&lng=80.221
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### Accept Ride
+POST {{baseUrl}}/api/drivers/rides/{{rideId}}/accept
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### Arrived
+POST {{baseUrl}}/api/drivers/rides/{{rideId}}/arrived
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### Verify OTP (use OTP from confirm ride — same code after arrived; do NOT call /arrived again before this)
+POST {{baseUrl}}/api/drivers/rides/{{rideId}}/verify-otp
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "otp": {{rideOtp}}
+}
+
+### Picked Up
+POST {{baseUrl}}/api/drivers/rides/{{rideId}}/picked-up
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### In Transit (required before drop on Docker backend)
+POST {{baseUrl}}/api/drivers/rides/{{rideId}}/in-transit
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### Dropped (generates new drop OTP — copy drop_otp from response, NOT pickup OTP)
+POST {{baseUrl}}/api/drivers/rides/{{rideId}}/dropped
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "fare": 250,
+  "lat": 12.971,
+  "lng": 80.242,
+  "actual_distance_km": 5.2,
+  "duration_min": 12
+}
+
+### Verify Drop OTP (use drop_otp from dropped response / customer app)
+POST {{baseUrl}}/api/drivers/rides/{{rideId}}/verify-drop-otp
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "otp": {{dropOtp}}
+}
+
+### Cash received (cash rides)
+POST {{baseUrl}}/api/drivers/rides/{{rideId}}/cash-received
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### Complete ride (after payment success)
+POST {{baseUrl}}/api/drivers/rides/{{rideId}}/complete
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### Wallet
+GET {{baseUrl}}/api/drivers/wallet
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### Earnings summary (today, IST tz_offset=330)
+GET {{baseUrl}}/api/drivers/earnings/summary?period=today&tz_offset=330
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### Earnings summary (this week)
+GET {{baseUrl}}/api/drivers/earnings/summary?period=week&tz_offset=330
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### Earnings cash
+GET {{baseUrl}}/api/drivers/earnings/cash
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### Earnings total
+GET {{baseUrl}}/api/drivers/earnings/total
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### Ride history
+GET {{baseUrl}}/api/drivers/rides/history
+Authorization: Bearer {{driverLogin.response.body.$.token}}

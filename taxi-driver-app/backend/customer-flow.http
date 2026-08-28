@@ -1,0 +1,125 @@
+# Customer API flow (Docker backend on http://localhost:3000)
+# Run ### blocks in order. For full test see e2e-ride-flow.http and TESTING.md
+#
+# If POST /rides/request returns "Pickup zone inactive":
+#   docker exec -i taxi_app_mongo mongosh -u taxiadmin -p taxi123 --authenticationDatabase admin taxi_app < scripts/seed-chennai-zone.mongodb.js
+#
+# Pickup/drop coordinates must lie inside an active operational zone.
+
+@baseUrl = http://localhost:3000
+@customerEmail = prasath2161@yopmail.com
+@customerPassword = Sk@123456
+@customerOtp = 946657
+@vehicleTypeId = 69fe6458d925bfe08b2b91b2
+### Health
+GET {{baseUrl}}/api/v1/health
+
+### Customer Register - Send OTP
+POST {{baseUrl}}/api/customers/register/email
+Content-Type: application/json
+
+{
+  "name": "prasath",
+  "phone": "9876543210",
+  "email": "{{customerEmail}}"
+}
+
+### Customer Register - Verify OTP
+POST {{baseUrl}}/api/customers/register/verify-otp
+Content-Type: application/json
+
+{
+  "email": "{{customerEmail}}",
+  "otp": "{{customerOtp}}"
+}
+
+### Customer Register - Set Password
+POST {{baseUrl}}/api/customers/register/set-password
+Content-Type: application/json
+
+{
+  "email": "{{customerEmail}}",
+  "password": "{{customerPassword}}"
+}
+
+### Customer Login
+# @name customerLogin
+POST {{baseUrl}}/api/customers/login
+Content-Type: application/json
+
+{
+  "email": "{{customerEmail}}",
+  "password": "{{customerPassword}}"
+}
+
+### Vehicle Types
+# @name vehicleTypes
+GET {{baseUrl}}/api/vehicle-types
+
+### Customer Profile
+GET {{baseUrl}}/api/customers/profile
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+### Request Ride
+# @name requestRide
+POST {{baseUrl}}/api/customers/rides/request
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "pickup_lat": 12.97598,
+  "pickup_lng": 80.22120,
+  "pickup_address": "Merin Mall, Chennai",
+  "drop_lat": 12.9268,
+  "drop_lng": 80.1203,
+  "drop_address": "VIT Chennai",
+  "vehicle_type_id": "69fe6458d925bfe08b2b91b2",
+  "payment_mode": "CASH"
+}
+
+### Active Ride (check before new request)
+GET {{baseUrl}}/api/customers/rides/active
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+### Abandon stale active ride (clears any in-progress ride before a new booking)
+POST {{baseUrl}}/api/customers/rides/active/abandon
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+### Cancel Ride (only PENDING_CONFIRMATION or SEARCHING_DRIVER)
+POST {{baseUrl}}/api/customers/rides/{{requestRide.response.body.$.ride_id}}/cancel
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+### Confirm Ride
+# @name confirmRide
+POST {{baseUrl}}/api/customers/rides/confirm
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "ride_id": "6a072c4ad1dd1cbc1ea301d1"
+}
+
+### Active Ride
+GET {{baseUrl}}/api/customers/rides/active
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+### Ride Status
+GET {{baseUrl}}/api/customers/rides/{{requestRide.response.body.$.ride_id}}/status
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+### Ride History
+GET {{baseUrl}}/api/customers/rides/history
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+### Customer Notifications
+GET {{baseUrl}}/api/notifications/customers
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+
+### Create Payment Order (ONLINE only + completed ride)
+# @name createPaymentOrder
+POST {{baseUrl}}/api/payments/create-order
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "ride_id": "{{requestRide.response.body.$.ride_id}}"
+}

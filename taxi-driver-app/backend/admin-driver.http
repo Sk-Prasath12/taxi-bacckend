@@ -1,0 +1,41 @@
+@baseUrl = http://localhost:3000
+@adminKey = dev-admin-key
+@driverId = PASTE_DRIVER_MONGO_ID
+
+### List drivers pending approval
+GET {{baseUrl}}/api/admin/drivers/pending
+x-admin-key: {{adminKey}}
+
+### List approved drivers (search kiruba12)
+GET {{baseUrl}}/api/admin/drivers/approved?q=kiruba
+x-admin-key: {{adminKey}}
+
+### Approve by login id (email prefix / name — e.g. kiruba12)
+POST {{baseUrl}}/api/admin/drivers/approve-by-login
+x-admin-key: {{adminKey}}
+Content-Type: application/json
+
+{
+  "login_id": "kiruba12"
+}
+
+### Approve by Mongo driver id
+POST {{baseUrl}}/api/admin/drivers/{{driverId}}/approve
+x-admin-key: {{adminKey}}
+Content-Type: application/json
+
+{
+  "note": "Approved by admin"
+}
+
+### Reject driver
+POST {{baseUrl}}/api/admin/drivers/{{driverId}}/reject
+x-admin-key: {{adminKey}}
+Content-Type: application/json
+
+{
+  "reason": "Rejected by admin"
+}
+
+### Web admin UI
+# http://localhost:3000/admin/driver-approval

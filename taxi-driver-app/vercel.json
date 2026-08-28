@@ -1,0 +1,21 @@
+{
+  "version": 2,
+  "name": "taxi-driver-app",
+  "buildCommand": "exit 0",
+  "installCommand": "exit 0",
+  "outputDirectory": "build/web",
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/downloads/(.*)",
+      "headers": [
+        {
+          "key": "Content-Disposition",
+          "value": "attachment; filename=\"taxi-driver.apk\""
+        }
+      ]
+    }
+  ]
+}

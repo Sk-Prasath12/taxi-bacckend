@@ -1,0 +1,6 @@
+Analyzing auth_service.dart...
+
+warning - auth_service.dart:4:8 - Unused import: 'dart:convert'. Try removing the import directive. - unused_import
+warning - auth_service.dart:6:8 - Unused import: 'package:http/http.dart'. Try removing the import directive. - unused_import
+
+2 issues found.

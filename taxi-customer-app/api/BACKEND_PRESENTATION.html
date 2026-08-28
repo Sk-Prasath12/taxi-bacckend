@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Taxi Backend – Presentation</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      margin: 0;
+      background: #1a1a2e;
+      color: #eee;
+      line-height: 1.5;
+    }
+    .slide {
+      min-height: 100vh;
+      padding: 3rem 4rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      border-bottom: 1px solid #333;
+    }
+    .slide h1 {
+      margin: 0 0 0.5rem;
+      font-size: 2rem;
+      color: #FDB813;
+    }
+    .slide h2 {
+      margin: 2rem 0 1rem;
+      font-size: 1.35rem;
+      color: #ccc;
+    }
+    .slide p, .slide li { color: #bbb; margin: 0.5rem 0; }
+    .slide ul { padding-left: 1.5rem; }
+    .mermaid {
+      background: #16213e;
+      padding: 1.5rem;
+      border-radius: 12px;
+      margin: 1rem 0;
+      overflow: auto;
+    }
+    .mermaid svg { max-width: 100%; height: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      background: #16213e;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    th, td { padding: 0.6rem 1rem; text-align: left; border-bottom: 1px solid #2a2a4a; }
+    th { background: #0f3460; color: #FDB813; font-weight: 600; }
+    tr:hover { background: #1a2a4a; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; align-items: start; }
+    @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+    .card {
+      background: #16213e;
+      padding: 1.25rem;
+      border-radius: 10px;
+      border-left: 4px solid #FDB813;
+    }
+    .card h3 { margin: 0 0 0.75rem; color: #FDB813; font-size: 1.1rem; }
+    .toc { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1rem; }
+    .toc a {
+      display: inline-block;
+      padding: 0.5rem 1rem;
+      background: #0f3460;
+      color: #FDB813;
+      text-decoration: none;
+      border-radius: 8px;
+      font-weight: 500;
+    }
+    .toc a:hover { background: #1a3a6a; }
+    code { background: #0f3460; padding: 0.2em 0.5em; border-radius: 4px; font-size: 0.9em; }
+    .subtitle { color: #888; font-size: 1rem; margin-top: 0; }
+  </style>
+</head>
+<body>
+
+  <section class="slide" id="title">
+    <h1>Taxi Backend – Structure & Charts</h1>
+    <p class="subtitle">REST API, orders, stats, earnings, ride history, WebSocket</p>
+    <h2>Contents</h2>
+    <div class="toc">
+      <a href="#overview">1. System overview</a>
+      <a href="#api-map">2. API map</a>
+      <a href="#database">3. Database ER</a>
+      <a href="#order-lifecycle">4. Order lifecycle</a>
+      <a href="#stats">5. Stats & earnings</a>
+      <a href="#history">6. Order history & route</a>
+      <a href="#websocket">7. WebSocket events</a>
+      <a href="#auth">8. Auth flow</a>
+      <a href="#tech">9. Tech stack</a>
+    </div>
+  </section>
+
+  <section class="slide" id="overview">
+    <h1>1. System overview</h1>
+    <p class="subtitle">Flutter app ↔ Backend ↔ DB, Redis, Email</p>
+    <div class="mermaid">
+flowchart TB
+    subgraph Client["📱 Client (Flutter taxi_user)"]
+        APP[Taxi User App]
+    end
+    subgraph Backend["🖥️ Backend (Node/NestJS)"]
+        API[REST API /api/v1]
+        WS[WebSocket Socket.IO]
+        AUTH[Auth]
+        BOOK[Booking]
+        STATS[Stats]
+        GW[Gateway]
+    end
+    subgraph Data["💾 Data & Services"]
+        DB[(PostgreSQL)]
+        REDIS[(Redis optional)]
+        SMTP[Email SMTP]
+    end
+    APP -->|HTTP + JWT| API
+    APP -->|Token| WS
+    API --> AUTH
+    API --> BOOK
+    API --> STATS
+    WS --> GW
+    AUTH --> DB
+    BOOK --> DB
+    STATS --> DB
+    GW --> DB
+    AUTH --> REDIS
+    AUTH --> SMTP
+    </div>
+  </section>
+
+  <section class="slide" id="api-map">
+    <h1>2. High-level API map</h1>
+    <div class="mermaid">
+flowchart LR
+    subgraph Auth["🔐 Auth"]
+        A1[Register]
+        A2[OTP Verify]
+        A3[Setup Password]
+        A4[Login]
+        A5[Profile]
+    end
+    subgraph Booking["🚕 Booking"]
+        B1[types, locations]
+        B2[orders]
+        B3[stats, count, earnings]
+    end
+    Client[Flutter] --> Auth
+    Client --> Booking
+    </div>
+    <table>
+      <tr><th>Area</th><th>Paths</th></tr>
+      <tr><td>Auth</td><td><code>/auth/register</code>, <code>/auth/login</code>, <code>/auth/profile</code>, OTP, refresh, forget/reset password</td></tr>
+      <tr><td>Booking</td><td><code>/booking/types</code>, <code>/booking/vehicle-types</code>, <code>/booking/package-types</code></td></tr>
+      <tr><td>Locations</td><td><code>GET/POST /booking/locations</code></td></tr>
+      <tr><td>Orders</td><td><code>POST/GET/PUT /booking/orders</code>, confirm, cancel, review</td></tr>
+      <tr><td>Stats</td><td><code>/booking/stats</code>, <code>/booking/rides/count</code>, <code>/booking/earnings</code>, <code>/booking/orders/summary</code></td></tr>
+    </table>
+  </section>
+
+  <section class="slide" id="database">
+    <h1>3. Database (main entities)</h1>
+    <div class="mermaid">
+erDiagram
+    user ||--o{ user_location : has
+    user ||--o{ order : places
+    order }o--o| vehicle_type : uses
+    order }o--o| package_type : uses
+    order ||--o| review : has one
+    user {
+        int id
+        string email
+        string name
+        string phone
+        string role
+    }
+    user_location {
+        int id
+        int user_id
+        string label
+        decimal lat
+        decimal lng
+    }
+    order {
+        int id
+        int user_id
+        string status
+        string drop_address
+        decimal total_amount
+        text route_polyline
+    }
+    review {
+        int id
+        int order_id
+        int rating
+    }
+    </div>
+    <p><strong>Tables:</strong> user, refresh_token, otp, user_location, vehicle_type, package_type, booking_type, order, review.</p>
+  </section>
+
+  <section class="slide" id="order-lifecycle">
+    <h1>4. Order lifecycle</h1>
+    <div class="mermaid">
+stateDiagram-v2
+    [*] --> DRAFT : POST /booking/orders
+    DRAFT --> PENDING : PUT confirm
+    DRAFT --> CANCELLED : Cancel
+    PENDING --> ASSIGNED : Driver accepts
+    PENDING --> CANCELLED : Cancel
+    ASSIGNED --> DRIVER_ARRIVED : At pickup
+    DRIVER_ARRIVED --> IN_PROGRESS : Trip start
+    IN_PROGRESS --> COMPLETED : Trip end
+    COMPLETED --> [*]
+    </div>
+    <table>
+      <tr><th>Status</th><th>Meaning</th></tr>
+      <tr><td>DRAFT</td><td>Created, not confirmed</td></tr>
+      <tr><td>PENDING</td><td>Confirmed, finding driver</td></tr>
+      <tr><td>ASSIGNED</td><td>Driver assigned</td></tr>
+      <tr><td>DRIVER_ARRIVED</td><td>Driver at pickup</td></tr>
+      <tr><td>IN_PROGRESS</td><td>Trip started</td></tr>
+      <tr><td>COMPLETED</td><td>Trip ended (count & earnings)</td></tr>
+      <tr><td>CANCELLED</td><td>Cancelled by user/driver/system</td></tr>
+    </table>
+  </section>
+
+  <section class="slide" id="stats">
+    <h1>5. Stats, count & earnings</h1>
+    <div class="mermaid">
+flowchart LR
+    ORDERS[(order)] --> F[status=COMPLETED\nuser_id]
+    F --> C[COUNT]
+    F --> S[SUM total_amount]
+    F --> D[SUM final_distance_km]
+    C --> E1[/stats]
+    S --> E1
+    D --> E1
+    C --> E2[/rides/count]
+    S --> E3[/earnings]
+    C --> E4[/orders/summary]
+    S --> E4
+    </div>
+    <table>
+      <tr><th>Endpoint</th><th>Response (data)</th></tr>
+      <tr><td><code>GET /booking/stats</code></td><td>totalRideCount, totalSpent, totalDistanceKm, completedCount, cancelledCount</td></tr>
+      <tr><td><code>GET /booking/rides/count</code></td><td>{ count }</td></tr>
+      <tr><td><code>GET /booking/earnings</code></td><td>totalSpent, currency</td></tr>
+      <tr><td><code>GET /booking/orders/summary</code></td><td>totalRideCount, totalSpent</td></tr>
+    </table>
+  </section>
+
+  <section class="slide" id="history">
+    <h1>6. Order history & history with route</h1>
+    <div class="two-col">
+      <div class="card">
+        <h3>List (ride history)</h3>
+        <p><code>GET /booking/orders?limit=20&offset=0&status=COMPLETED</code></p>
+        <p>Add <code>&includeRoute=true</code> to get <code>routePolyline</code> or <code>routeCoordinates</code> per order for the map.</p>
+      </div>
+      <div class="card">
+        <h3>Single order with route</h3>
+        <p><code>GET /booking/orders/:id?includeRoute=true</code></p>
+        <p>Returns one order with full route (pickup, drop, polyline/coordinates) for ride detail screen.</p>
+      </div>
+    </div>
+    <p><strong>Storage:</strong> Store <code>route_polyline</code> (encoded or JSON array of [lat,lng]) on the <code>order</code> table when trip is completed or route is computed.</p>
+  </section>
+
+  <section class="slide" id="websocket">
+    <h1>7. WebSocket events (user app)</h1>
+    <div class="mermaid">
+sequenceDiagram
+    participant App as Flutter
+    participant Server as Backend
+    App->>Server: connect(token)
+    Server-->>App: authenticated
+    App->>Server: join_ride orderId
+    Server-->>App: finding_driver
+    Server-->>App: order_assigned
+    Server-->>App: driver_arrived
+    Server-->>App: order_status_update
+    Server-->>App: location_update
+    Server-->>App: order_completed
+    </div>
+    <table>
+      <tr><th>Server → App</th><th>App → Server</th></tr>
+      <tr><td>authenticated, auth_error, order_created, finding_driver, order_assigned, order_status_update, driver_arrived, location_update, order_cancelled, order_completed</td><td>join_ride { orderId }, leave_ride { orderId }</td></tr>
+    </table>
+  </section>
+
+  <section class="slide" id="auth">
+    <h1>8. Auth flow</h1>
+    <div class="mermaid">
+flowchart TB
+    R1[POST /auth/register] --> R2[Send OTP]
+    R2 --> R3[Verify OTP]
+    R3 --> R4[Setup password]
+    R4 --> R5[Tokens]
+    L1[POST /auth/login] --> L2[Access + Refresh]
+    R5 --> P[GET/PUT /auth/profile]
+    L2 --> P
+    P --> B[All /booking/* with Bearer]
+    </div>
+    <p>Also: login/send-otp, login/verify-otp, refresh, forget-password, reset-password.</p>
+  </section>
+
+  <section class="slide" id="tech">
+    <h1>9. Tech stack</h1>
+    <div class="mermaid">
+flowchart LR
+    N[Node.js] --> F[NestJS/Express]
+    F --> R[REST]
+    F --> S[Socket.IO]
+    F --> PG[(PostgreSQL)]
+    F --> RD[(Redis)]
+    F --> E[SMTP]
+    </div>
+    <table>
+      <tr><th>Layer</th><th>Choice</th></tr>
+      <tr><td>Runtime</td><td>Node.js 18+</td></tr>
+      <tr><td>Framework</td><td>NestJS or Express</td></tr>
+      <tr><td>API</td><td>REST /api/v1 + Socket.IO</td></tr>
+      <tr><td>Database</td><td>PostgreSQL; Prisma or TypeORM</td></tr>
+      <tr><td>Auth</td><td>JWT access + refresh</td></tr>
+      <tr><td>Email</td><td>Nodemailer / SMTP for OTP</td></tr>
+    </table>
+  </section>
+
+  <section class="slide">
+    <h1>End</h1>
+    <p class="subtitle">Taxi Backend – Presentation</p>
+    <p>See <code>BACKEND_STRUCTURE.md</code> for full API and schema details.<br>
+    See <code>BACKEND_PRESENTATION.md</code> for Mermaid source in Markdown.</p>
+  </section>
+
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'dark',
+      themeVariables: {
+        primaryColor: '#FDB813',
+        primaryTextColor: '#fff',
+        primaryBorderColor: '#FDB813',
+        lineColor: '#888',
+        secondaryColor: '#0f3460',
+        tertiaryColor: '#16213e'
+      }
+    });
+  </script>
+</body>
+</html>

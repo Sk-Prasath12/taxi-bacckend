@@ -1,0 +1,77 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+*.orig
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# IntelliJ / Android Studio
+*.iml
+*.ipr
+*.iws
+.idea/
+local.properties
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Flutter/Dart/Pub
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+.packages
+/build/
+/coverage/
+*.dill
+
+# Symbolication
+app.*.symbols
+
+# Obfuscation
+app.*.map.json
+
+# Android
+/android/app/debug
+/android/app/profile
+/android/app/release
+/android/**/key.properties
+/android/**/.gradle/
+
+# iOS/macOS
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/App.framework
+**/ios/Flutter/Flutter.framework
+**/macos/Flutter/GeneratedPluginRegistrant.swift
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+!.env.production.example
+public-api-url.txt
+tools/cloudflared.exe
+tools/cloudflared.log
+tools/cloudflared.pid
+.env.local
+
+.vercel
+.env*

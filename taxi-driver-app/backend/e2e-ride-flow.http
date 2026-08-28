@@ -1,0 +1,103 @@
+# End-to-end: customer books ride -> driver completes ride
+# Run requests top to bottom (VS Code REST Client: "Send Request" on each ### block)
+#
+# Prerequisites (Docker backend on port 3000):
+# 1. taxi_app_backend + taxi_app_mongo containers running
+# 2. Active operational zone (if "Pickup zone inactive", run seed-chennai-zone.mongodb.js)
+# 3. Driver sridharshini@yopmail.com approved (is_driver_verified=true)
+
+@baseUrl = http://localhost:3000
+@customerEmail = prasath2161@yopmail.com
+@customerPassword = Sk@123456
+@driverEmail = sridharshini@yopmail.com
+@driverPassword = sri@123456
+@vehicleTypeId = 69fe6458d925bfe08b2b91b2
+
+### 1) Customer Login
+# @name customerLogin
+POST {{baseUrl}}/api/customers/login
+Content-Type: application/json
+
+{
+  "email": "{{customerEmail}}",
+  "password": "{{customerPassword}}"
+}
+
+### 2) Request Ride
+# @name requestRide
+POST {{baseUrl}}/api/customers/rides/request
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "pickup_lat": 12.97598,
+  "pickup_lng": 80.22120,
+  "pickup_address": "prince info city, Chennai",
+  "drop_lat": 12.9268,
+  "drop_lng": 80.1203,
+  "drop_address": "VIT Chennai",
+  "vehicle_type_id": "{{vehicleTypeId}}",
+  "payment_mode": "CASH"
+}
+
+### 3) Confirm Ride (dispatches to drivers)
+# @name confirmRide
+POST {{baseUrl}}/api/customers/rides/confirm
+Authorization: Bearer {{customerLogin.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "ride_id": "{{requestRide.response.body.$.ride_id}}"
+}
+
+### 4) Driver Login
+# @name driverLogin
+POST {{baseUrl}}/api/drivers/login
+Content-Type: application/json
+
+{
+  "email": "{{driverEmail}}",
+  "password": "{{driverPassword}}"
+}
+
+### 5) Incoming Rides
+GET {{baseUrl}}/api/drivers/rides/incoming
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### 6) Accept Ride
+POST {{baseUrl}}/api/drivers/rides/{{requestRide.response.body.$.ride_id}}/accept
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### 7) Arrived at pickup
+POST {{baseUrl}}/api/drivers/rides/{{requestRide.response.body.$.ride_id}}/arrived
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### 8) Verify OTP (4-digit number from confirm ride response — not a new code)
+POST {{baseUrl}}/api/drivers/rides/{{requestRide.response.body.$.ride_id}}/verify-otp
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "otp": {{confirmRide.response.body.ride.otp}}
+}
+
+### 9) Picked up
+POST {{baseUrl}}/api/drivers/rides/{{requestRide.response.body.$.ride_id}}/picked-up
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### 10) In transit
+POST {{baseUrl}}/api/drivers/rides/{{requestRide.response.body.$.ride_id}}/in-transit
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+
+### 11) Dropped / complete ride
+POST {{baseUrl}}/api/drivers/rides/{{requestRide.response.body.$.ride_id}}/dropped
+Authorization: Bearer {{driverLogin.response.body.$.token}}
+Content-Type: application/json
+
+{
+  "fare": {{requestRide.response.body.$.fare}}
+}
+
+### 12) Customer ride status
+GET {{baseUrl}}/api/customers/rides/{{requestRide.response.body.$.ride_id}}/status
+Authorization: Bearer {{customerLogin.response.body.$.token}}

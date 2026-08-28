@@ -1,0 +1,24 @@
+# Deploy only Flutter web output to Vercel
+*
+!build
+!build/web
+!build/web/**
+!vercel.json
+android
+ios
+linux
+macos
+windows
+.build
+.dart_tool
+.idea
+.vscode
+node_modules
+tools
+scripts
+test
+*.apk
+*.aab
+*.md
+assets
+lib

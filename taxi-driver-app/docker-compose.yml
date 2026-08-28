@@ -1,0 +1,44 @@
+# Taxi app stack — matches running containers: taxi_app_mongo, taxi_app_backend, taxi_osrm
+#
+# Start MongoDB only (if backend image is built separately):
+#   docker compose up -d mongo
+#
+# Full stack (requires taxi-backend-main image or build context):
+#   docker compose up -d
+#
+# MongoDB URL from host (Flutter / local Node backend):
+#   mongodb://taxiadmin:taxi123@localhost:27018/taxi_app?authSource=admin
+
+services:
+  mongo:
+    image: mongo:7
+    container_name: taxi_app_mongo
+    restart: unless-stopped
+    ports:
+      - "27018:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: taxiadmin
+      MONGO_INITDB_ROOT_PASSWORD: taxi123
+    volumes:
+      - taxi_mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "-u", "taxiadmin", "-p", "taxi123", "--authenticationDatabase", "admin", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Uncomment and set build context to your taxi-backend-main repo if you rebuild the API here.
+  # app:
+  #   build: ../taxi-backend-main
+  #   container_name: taxi_app_backend
+  #   restart: unless-stopped
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     MONGODB_URI: mongodb://taxiadmin:taxi123@mongo:27017/taxi_app?authSource=admin
+  #   depends_on:
+  #     mongo:
+  #       condition: service_healthy
+
+volumes:
+  taxi_mongo_data:
