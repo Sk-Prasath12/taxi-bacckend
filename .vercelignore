@@ -1,0 +1,9 @@
+taxi-customer-app/
+taxi-driver-app/
+taxi-admin-react/
+apk-downloads/
+**/*.apk
+**/.dart_tool/
+**/build/
+**/node_modules/
+.git/
