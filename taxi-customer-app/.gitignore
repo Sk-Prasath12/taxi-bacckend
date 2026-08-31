@@ -75,3 +75,6 @@ tools/cloudflared.pid
 
 .vercel
 .env*
+
+.vercel
+.env*

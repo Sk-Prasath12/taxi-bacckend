@@ -24,7 +24,6 @@ osrm-data.zip
 **/.flutter-plugins-dependencies
 
 # Vercel
-.vercel/
 **/.vercel/
 
 # OS

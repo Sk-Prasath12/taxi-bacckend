@@ -1,9 +1,10 @@
 # Taxi Admin (React)
 
-GitLab monorepo: https://gitlab.com/taxi_nodejsapp/taxi-backend.git  
-Folder: `taxi-admin-react/`
+- **GitLab group:** https://gitlab.com/groups/taxi_nodejsapp
+- **Monorepo:** https://gitlab.com/taxi_nodejsapp/taxi-backend.git (`taxi-admin-react/`)
+- **Standalone repo:** https://gitlab.com/taxi_nodejsapp/taxi-admin
 
-Production: https://taxi-admin-react.vercel.app
+Production (unchanged): https://taxi-admin-react.vercel.app
 
 ```bash
 npm install

@@ -1,5 +1,7 @@
 # GitLab + Vercel deployment
 
+Production URLs stay the same; only the **Git source** moves to GitLab group `taxi_nodejsapp`.
+
 ## GitLab group
 
 - Group: https://gitlab.com/groups/taxi_nodejsapp
@@ -25,7 +27,7 @@ git push origin main
 
 | Project | URL | Root directory |
 |---------|-----|----------------|
-| taxi-bacckend | https://taxi-bacckend.vercel.app | `.` |
+| taxi-bacckend | https://taxi-bacckend.vercel.app | `taxi-backend-main` |
 | taxi-admin-react | https://taxi-admin-react.vercel.app | `taxi-admin-react` |
 | taxi-apk-downloads | https://taxi-apk-downloads.vercel.app | `apk-downloads` |
 | taxi-customer-app | https://taxi-customer-app.vercel.app | `taxi-customer-app` |

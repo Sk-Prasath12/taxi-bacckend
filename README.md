@@ -1,27 +1,18 @@
 # Taxi Platform (Monorepo)
 
-Full taxi stack hosted on **GitLab** group [`taxi_nodejsapp`](https://gitlab.com/groups/taxi_nodejsapp).
+Full taxi stack: API backend, customer app, driver app, admin dashboard, and APK download site.
 
-**Primary repository:** https://gitlab.com/taxi_nodejsapp/taxi-backend.git (branch `main`)
+## Projects
 
-## Projects in this repo
+| Folder | Description | Deploy |
+|--------|-------------|--------|
+| [`taxi-backend-main/`](taxi-backend-main/) | Node.js REST API + Socket bridge | Vercel: `taxi-bacckend.vercel.app` |
+| [`taxi-customer-app/`](taxi-customer-app/) | Flutter customer APK | Vercel APK: `taxi-apk-downloads.vercel.app` |
+| [`taxi-driver-app/`](taxi-driver-app/) | Flutter driver APK | Vercel APK: `taxi-apk-downloads.vercel.app` |
+| [`taxi-admin-react/`](taxi-admin-react/) | React admin dashboard | Vercel: `taxi-admin-react.vercel.app` |
+| [`apk-downloads/`](apk-downloads/) | Static APK download pages | Vercel |
 
-| Folder | App | Production URL |
-|--------|-----|----------------|
-| [`taxi-backend-main/`](taxi-backend-main/) | Node.js API | https://taxi-bacckend.vercel.app |
-| [`taxi-customer-app/`](taxi-customer-app/) | Flutter customer | APK: https://taxi-apk-downloads.vercel.app |
-| [`taxi-driver-app/`](taxi-driver-app/) | Flutter driver | APK: https://taxi-apk-downloads.vercel.app |
-| [`taxi-admin-react/`](taxi-admin-react/) | Admin dashboard | https://taxi-admin-react.vercel.app |
-| [`apk-downloads/`](apk-downloads/) | APK download site | https://taxi-apk-downloads.vercel.app |
-
-## Clone
-
-```bash
-git clone https://gitlab.com/taxi_nodejsapp/taxi-backend.git
-cd taxi-backend
-```
-
-## Backend
+## Backend quick start
 
 ```bash
 cd taxi-backend-main
@@ -29,6 +20,8 @@ npm install
 cp .env.example .env.local
 npm run dev
 ```
+
+See `taxi-backend-main/.env.example` for required environment variables.
 
 ## Flutter apps
 
@@ -38,7 +31,7 @@ flutter pub get
 flutter build apk --release
 ```
 
-## Admin panel
+## Admin
 
 ```bash
 cd taxi-admin-react
@@ -46,16 +39,17 @@ npm install
 npm run dev
 ```
 
-## Vercel + GitLab (auto deploy)
+## GitLab
 
-All Vercel projects connect to the **same GitLab repo**. Set **Root Directory** per project in Vercel → Settings → General:
+- **Group:** https://gitlab.com/groups/taxi_nodejsapp
+- **Monorepo (all apps):** https://gitlab.com/taxi_nodejsapp/taxi-backend.git — branch `main`
 
-| Vercel project | Root directory |
-|----------------|----------------|
-| `taxi-bacckend` | `.` (repo root) |
-| `taxi-admin-react` | `taxi-admin-react` |
-| `taxi-apk-downloads` | `apk-downloads` |
-| `taxi-customer-app` | `taxi-customer-app` |
-| `taxi-driver-app` | `taxi-driver-app` |
+Optional standalone repos under the same group:
 
-See [`docs/GITLAB_VERCEL.md`](docs/GITLAB_VERCEL.md) for connect commands.
+| App | GitLab repo |
+|-----|-------------|
+| Customer | https://gitlab.com/taxi_nodejsapp/taxi-customer-app |
+| Driver | https://gitlab.com/taxi_nodejsapp/taxi-driver-app |
+| Admin | https://gitlab.com/taxi_nodejsapp/taxi-admin |
+
+Vercel production URLs are unchanged; only the Git source is GitLab. See [`docs/GITLAB_VERCEL.md`](docs/GITLAB_VERCEL.md).

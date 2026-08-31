@@ -2,7 +2,7 @@
 
 Node.js REST API for customer, driver, and admin apps.
 
-Part of the GitLab monorepo: https://gitlab.com/taxi_nodejsapp/taxi-backend.git
+Part of the GitLab group https://gitlab.com/groups/taxi_nodejsapp — monorepo: https://gitlab.com/taxi_nodejsapp/taxi-backend.git
 
 Production: https://taxi-bacckend.vercel.app
 
