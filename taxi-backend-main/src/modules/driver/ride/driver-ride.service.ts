@@ -13,6 +13,7 @@ import { buildRideEmitPayload, toFlexibleClientStatus } from "../../../utils/rid
 import {
   dispatchNewRideToNearbyDrivers,
   dispatchRideUnavailableToDrivers,
+  emitToRoom,
 } from "../../../socket/socket-emit.service";
 import {
   getDriverLocationForMatching,
@@ -25,6 +26,10 @@ import { persistUserLocation } from "../../../utils/driver-location-persist.util
 import { acceptRideAtomically } from "../../../socket/ride-booking/ride-booking.repository";
 import { upsertOnlineDriver } from "../../../socket/ride-booking/ride-booking.store";
 import { emitCustomerAndRide, emitRideStatusToParties, emitAdminRideUpdate } from "../../../utils/ride-socket-events.util";
+import {
+  assertRideCancellable,
+  applyCancellationFields,
+} from "../../common/ride-cancel.util";
 import {
   driverMatchesVehicleType,
   getDriverVehicleTypeId,
@@ -208,31 +213,37 @@ const finalizeCompletedRide = async (ride: RideDocument) => {
     }
   }
 
-  const customerId = String(ride.customer_id);
-  await emitRideLifecycle(ride, "COMPLETED");
-  emitCustomerAndRide(customerId, ride.id, "ride_completed", {
-    ride_id: ride.id,
+  // Reload after finance so socket payload includes driver_earning + finance_processed.
+  const settled = (await RideModel.findById(ride._id)) ?? ride;
+  const customerId = String(settled.customer_id);
+  await emitRideLifecycle(settled, "COMPLETED");
+  emitCustomerAndRide(customerId, settled.id, "ride_completed", {
+    ride_id: settled.id,
     status: "COMPLETED",
-    fare: ride.fare,
-    actual_distance_km: ride.actual_distance_km,
-    actual_duration_min: ride.actual_duration_min,
-    payment_status: ride.payment_status,
-    payment_mode: ride.payment_mode,
-    finance_processed: Boolean(ride.finance_processed),
+    fare: settled.fare,
+    driver_earning: settled.driver_earning ?? null,
+    commission_amount: settled.commission_amount ?? null,
+    actual_distance_km: settled.actual_distance_km,
+    actual_duration_min: settled.actual_duration_min,
+    payment_status: settled.payment_status,
+    payment_mode: settled.payment_mode,
+    finance_processed: Boolean(settled.finance_processed),
   });
   void emitAdminRideUpdate("ride_completed", {
-    ride_id: ride.id,
+    ride_id: settled.id,
     status: "COMPLETED",
-    fare: ride.fare,
-    payment_status: ride.payment_status,
-    payment_mode: ride.payment_mode,
+    fare: settled.fare,
+    driver_earning: settled.driver_earning ?? null,
+    commission_amount: settled.commission_amount ?? null,
+    payment_status: settled.payment_status,
+    payment_mode: settled.payment_mode,
     customer_id: customerId,
-    driver_id: ride.driver_id ? String(ride.driver_id) : null,
-    finance_processed: Boolean(ride.finance_processed),
+    driver_id: settled.driver_id ? String(settled.driver_id) : null,
+    finance_processed: Boolean(settled.finance_processed),
   });
   await sendRideStatusPush(
     customerId,
-    ride.id,
+    settled.id,
     "RIDE_COMPLETED",
     "Ride Completed ✅",
     "Thank you for riding with us"
@@ -907,7 +918,27 @@ export const completeRideAfterPayment = async (driverIdInput: string | undefined
     throw new HttpError(400, "Drop OTP must be verified before completing ride");
   }
   if (ride.status === "COMPLETED") {
-    return { message: "Ride already completed", ride_id: ride.id, status: ride.status };
+    // Retry finance/invoice if a prior completion left settlement incomplete.
+    if (!ride.finance_processed && ride.payment_status === "SUCCESS") {
+      try {
+        await processRidePayment(ride);
+        await generateInvoice(ride);
+      } catch (error) {
+        logger.error(
+          { error, ride_id: ride.id },
+          "Finance retry on already-completed ride failed"
+        );
+      }
+    }
+    return {
+      message: "Ride already completed",
+      ride_id: ride.id,
+      status: ride.status,
+      payment_status: ride.payment_status,
+      finance_processed: Boolean(ride.finance_processed),
+      fare: ride.fare,
+      driver_earning: ride.driver_earning ?? null,
+    };
   }
   if (ride.payment_mode === "ONLINE" && ride.payment_status !== "SUCCESS") {
     throw new HttpError(400, "Online payment must be successful before completing ride");
@@ -982,6 +1013,50 @@ export const verifyRideOtpAndStartRide = async (
   };
 };
 
+export const cancelAssignedRide = async (
+  driverIdInput: string | undefined,
+  rideIdInput?: string,
+  reasonInput?: string
+) => {
+  const driver = await getDriverOrThrow(driverIdInput);
+  const rideId = ensureRideId(rideIdInput);
+  const ride = await getRideByIdOrThrow(rideId);
+  ensureRideBelongsToDriver(ride, driver.id);
+
+  assertRideCancellable(ride);
+  applyCancellationFields(ride, "DRIVER", reasonInput);
+  await ride.save();
+
+  await UserModel.updateOne(
+    { _id: driver._id },
+    { $set: { driver_status: "ONLINE" } }
+  );
+
+  const payload = {
+    ride_id: ride.id,
+    status: "CANCELLED" as const,
+    cancelled_by: ride.cancelled_by,
+    cancellation_reason: ride.cancellation_reason,
+    cancelled_at: ride.cancelled_at,
+    previous_status: ride.previous_status,
+  };
+
+  emitCustomerAndRide(String(ride.customer_id), ride.id, "ride_cancelled", payload);
+  emitCustomerAndRide(String(ride.customer_id), ride.id, "ride_status_update", payload);
+  await emitToRoom(`driver_${driver.id}`, "ride_cancelled", payload);
+  void emitAdminRideUpdate("ride_cancelled", {
+    ...payload,
+    customer_id: String(ride.customer_id),
+    driver_id: driver.id,
+  });
+
+  return {
+    success: true,
+    message: "Ride cancelled",
+    ...payload,
+  };
+};
+
 export const getDriverRideHistory = async (driverIdInput: string | undefined) => {
   const driver = await getDriverOrThrow(driverIdInput);
 
@@ -1002,9 +1077,15 @@ export const getDriverRideHistory = async (driverIdInput: string | undefined) =>
         duration_min: ride.duration_min ?? null,
         actual_duration_min: ride.actual_duration_min ?? null,
         fare: ride.fare,
+        driver_earning: ride.driver_earning ?? null,
+        commission_amount: ride.commission_amount ?? null,
         payment_mode: ride.payment_mode ?? "CASH",
         payment_status: ride.payment_status ?? "PENDING",
         finance_processed: Boolean(ride.finance_processed),
+        completed_at: ride.completed_at ?? null,
+        cancelled_at: ride.cancelled_at ?? null,
+        cancelled_by: ride.cancelled_by ?? null,
+        cancellation_reason: ride.cancellation_reason ?? null,
         vehicle_type_id: ride.vehicle_type_id ? String(ride.vehicle_type_id) : null,
         drop_reached: Boolean(
           (ride as RideDocument & { drop_reached?: boolean }).drop_reached
@@ -1022,12 +1103,6 @@ export const getDriverRideHistory = async (driverIdInput: string | undefined) =>
           : null,
         createdAt: ride.createdAt,
         updatedAt: ride.updatedAt,
-        completed_at:
-          ride.status === "COMPLETED"
-            ? (ride as RideDocument & { completed_at?: Date }).completed_at ??
-              ride.updatedAt ??
-              null
-            : null,
       };
     })
   );
@@ -1087,6 +1162,11 @@ export const updateRideStatusByDriver = async (
       status: "COMPLETED",
       payment_status: ride.payment_status,
     };
+  }
+
+  // Never allow raw CANCELLED via status PATCH without cancel gates + fields.
+  if (nextStatus === "CANCELLED") {
+    return cancelAssignedRide(driverIdInput, rideIdInput, "Cancelled via status update");
   }
 
   ride.status = nextStatus;

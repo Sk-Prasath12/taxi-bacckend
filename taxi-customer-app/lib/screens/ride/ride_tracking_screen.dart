@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../../services/active_ride_store.dart';
 import '../../services/ride_service.dart';
+import '../../services/ride_session_cleanup.dart';
 import '../../services/route_service.dart';
 import '../../services/session_service.dart';
 import '../../services/socket_service.dart';
@@ -106,6 +107,7 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
   bool _dropOtpVerified = false;
   bool _emergencySending = false;
   bool _emergencySent = false;
+  bool _cancellingRide = false;
 
   bool get _isSearchingStage =>
       rideStatus == 'SEARCHING_DRIVER' || rideStatus == 'SEARCHING';
@@ -122,6 +124,13 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
       rideStatus == 'STARTED' ||
       rideStatus == 'PICKED_UP' ||
       rideStatus == 'IN_TRANSIT';
+  bool get _canCancelRide =>
+      !_pickupOtpVerified &&
+      !_isTripNavigationStage &&
+      (_isSearchingStage ||
+          _isDriverAssignedStage ||
+          _isDriverArrivedStage ||
+          rideStatus == 'PENDING_CONFIRMATION');
   bool get _showLiveDriver => !_isSearchingStage;
   bool get _navigationMode => _isTripNavigationStage;
 
@@ -1286,6 +1295,59 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
         arguments: {'rideId': rideId});
   }
 
+  Future<void> _cancelActiveRide() async {
+    if (_cancellingRide || !_canCancelRide) return;
+    final args = ModalRoute.of(context)?.settings.arguments as Map?;
+    final rideId = args?['rideId']?.toString() ??
+        _latestRidePayload?['ride_id']?.toString() ??
+        '';
+    if (rideId.isEmpty) return;
+
+    final reasonController = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Cancel ride?'),
+        content: TextField(
+          controller: reasonController,
+          maxLines: 3,
+          decoration: const InputDecoration(
+            labelText: 'Reason (optional)',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep ride'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Cancel ride'),
+          ),
+        ],
+      ),
+    );
+    final reason = reasonController.text;
+    reasonController.dispose();
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _cancellingRide = true);
+    try {
+      await RideService.cancelRide(rideId, reason: reason);
+      await RideSessionCleanup.clearLocalOnly();
+      if (!mounted) return;
+      Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Cancel failed: $e'), backgroundColor: AppTheme.danger),
+      );
+    } finally {
+      if (mounted) setState(() => _cancellingRide = false);
+    }
+  }
+
   Future<void> _sendEmergencyAlert() async {
     if (_emergencySending || _emergencySent) return;
     final args = ModalRoute.of(context)?.settings.arguments as Map?;
@@ -1531,6 +1593,24 @@ class _RideTrackingScreenState extends State<RideTrackingScreen>
                                   style: OutlinedButton.styleFrom(
                                     side: const BorderSide(color: AppTheme.danger),
                                     padding: const EdgeInsets.symmetric(vertical: 12),
+                                  ),
+                                ),
+                              ),
+                            ],
+                            if (_canCancelRide) ...[
+                              const SizedBox(height: 12),
+                              SizedBox(
+                                width: double.infinity,
+                                child: OutlinedButton(
+                                  onPressed: _cancellingRide ? null : _cancelActiveRide,
+                                  style: OutlinedButton.styleFrom(
+                                    side: const BorderSide(color: AppTheme.danger),
+                                    foregroundColor: AppTheme.danger,
+                                    padding: const EdgeInsets.symmetric(vertical: 12),
+                                  ),
+                                  child: Text(
+                                    _cancellingRide ? 'Cancelling…' : 'Cancel Ride',
+                                    style: const TextStyle(fontWeight: FontWeight.w700),
                                   ),
                                 ),
                               ),

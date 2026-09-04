@@ -1,8 +1,10 @@
 import { env } from "../config/env";
 import { logger } from "../config/logger";
+import { applyCancellationFields } from "../modules/common/ride-cancel.util";
 import { RideDocument, RideModel } from "../modules/customer/ride/ride.model";
 import { emitToCustomer, emitToRide } from "../socket/socket";
-import { dispatchRideUnavailableToDrivers } from "../socket/socket-emit.service";
+import { dispatchRideUnavailableToDrivers, emitToRoom } from "../socket/socket-emit.service";
+import { emitAdminRideUpdate } from "./ride-socket-events.util";
 
 export const getRideSearchTimeoutMs = (): number =>
   Math.round(env.RIDE_SEARCH_TIMEOUT_SEC * 1000);
@@ -30,41 +32,54 @@ export const expireSearchingRideIfNeeded = async (
 ): Promise<RideDocument> => {
   if (!isSearchingRideExpired(ride)) return ride;
 
-  const updated = await RideModel.findOneAndUpdate(
-    { _id: ride._id, status: "SEARCHING_DRIVER", driver_id: null },
-    { $set: { status: "CANCELLED" } },
-    { new: true }
-  );
+  const current = await RideModel.findOne({
+    _id: ride._id,
+    status: "SEARCHING_DRIVER",
+    driver_id: null,
+  });
 
-  if (!updated) {
+  if (!current) {
     const fresh = await RideModel.findById(ride._id);
     return fresh ?? ride;
   }
 
+  applyCancellationFields(current, "SYSTEM", "SEARCH_TIMEOUT: No driver accepted in time");
+  await current.save();
+
   logger.info(
     {
-      ride_id: updated.id,
+      ride_id: current.id,
       timeout_sec: getRideSearchTimeoutSec(),
     },
     "SEARCHING_DRIVER auto-cancelled after timeout"
   );
 
+  const payload = {
+    ride_id: current.id,
+    status: "CANCELLED" as const,
+    cancelled_by: current.cancelled_by,
+    cancellation_reason: current.cancellation_reason,
+    cancelled_at: current.cancelled_at,
+    previous_status: current.previous_status,
+    reason: "SEARCH_TIMEOUT",
+    message: "No driver accepted in time. Please try again.",
+  };
+
   try {
-    dispatchRideUnavailableToDrivers(updated.id);
-    emitToCustomer(String(updated.customer_id), "ride_status_update", {
-      ride_id: updated.id,
-      status: "CANCELLED",
-      reason: "SEARCH_TIMEOUT",
-      message: "No driver accepted in time. Please try again.",
-    });
-    emitToRide(updated.id, "ride_status_update", {
-      ride_id: updated.id,
-      status: "CANCELLED",
-      reason: "SEARCH_TIMEOUT",
+    dispatchRideUnavailableToDrivers(current.id);
+    emitToCustomer(String(current.customer_id), "ride_status_update", payload);
+    emitToCustomer(String(current.customer_id), "ride_cancelled", payload);
+    emitToRide(current.id, "ride_status_update", payload);
+    emitToRide(current.id, "ride_cancelled", payload);
+    await emitToRoom("drivers", "ride_cancelled", payload);
+    void emitAdminRideUpdate("ride_cancelled", {
+      ...payload,
+      customer_id: String(current.customer_id),
+      driver_id: null,
     });
   } catch (error) {
-    logger.warn({ error, ride_id: updated.id }, "Failed to emit cancel after search timeout");
+    logger.warn({ error, ride_id: current.id }, "Failed to emit cancel after search timeout");
   }
 
-  return updated;
+  return current;
 };

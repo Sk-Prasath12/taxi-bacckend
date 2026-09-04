@@ -8,19 +8,19 @@ class FareCalculator {
   static const Map<String, double> vehicleRates = {
     'Bike': 10,
     'Auto': 20,
-    'Mini': 30,
-    'Sedan': 40,
-    'SUV': 50,
-    'Premium Sedan': 60,
-    'Premium SUV': 70,
-    'XL': 80,
-    'Electric': 90,
-    'Accessible': 100,
+    '5 Seater': 35,
+    '7 Seater': 55,
     // Legacy aliases
-    'Small 5 Seater Car': 30,
-    '5 Seater': 30,
-    'Big 7 Seater Car': 70,
-    '7 Seater': 70,
+    'Mini': 35,
+    'Sedan': 35,
+    'SUV': 55,
+    'Premium Sedan': 35,
+    'Premium SUV': 55,
+    'XL': 55,
+    'Electric': 35,
+    'Accessible': 35,
+    'Small 5 Seater Car': 35,
+    'Big 7 Seater Car': 55,
   };
 
   static double calculateFare(double distanceKm, {double? ratePerKmOverride}) {

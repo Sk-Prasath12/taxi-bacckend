@@ -7,8 +7,8 @@ import '../models/ride_models.dart';
 /// Caches vehicle types so booking works after one successful API load.
 /// Bump key whenever the canonical catalog changes.
 class VehicleTypesCache {
-  static const _key = 'vehicle_types_cache_v3';
-  static const _legacyKeys = ['vehicle_types_cache_v2', 'vehicle_types_cache_v1'];
+  static const _key = 'vehicle_types_cache_v4';
+  static const _legacyKeys = ['vehicle_types_cache_v3', 'vehicle_types_cache_v2', 'vehicle_types_cache_v1'];
 
   static Future<void> save(List<VehicleTypeModel> vehicles) async {
     if (vehicles.isEmpty) return;

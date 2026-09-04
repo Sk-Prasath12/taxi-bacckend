@@ -94,7 +94,13 @@ export const getRideStatusController = async (
 export const cancelRideController = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const rideId = Array.isArray(req.params.rideId) ? req.params.rideId[0] : req.params.rideId;
-    const data = await cancelRide(req.authUser?.userId, rideId);
+    const reason =
+      typeof req.body?.reason === "string"
+        ? req.body.reason
+        : typeof req.body?.cancellation_reason === "string"
+          ? req.body.cancellation_reason
+          : undefined;
+    const data = await cancelRide(req.authUser?.userId, rideId, reason);
     return res.status(200).json(data);
   } catch (error) {
     return next(error);

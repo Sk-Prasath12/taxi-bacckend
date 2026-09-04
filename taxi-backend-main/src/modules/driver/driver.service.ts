@@ -11,9 +11,11 @@ import {
 import { UserModel } from "../users/users.model";
 import { WalletModel } from "../finance/wallet.model";
 import { DriverDueModel } from "../finance/driver-due.model";
+import { WalletTransactionModel } from "../finance/wallet-transaction.model";
 import { RideModel } from "../customer/ride/ride.model";
 import { DriverOtpModel } from "./driver.otp.model";
 import { VehicleTypeModel } from "../vehicle-type/vehicle-type.model";
+import { calculateCommission } from "../common/commission.service";
 
 const OTP_EXPIRY_MINUTES = 10;
 const OTP_PURPOSE_REGISTER = "REGISTER" as const;
@@ -568,11 +570,80 @@ export const updateDriverStatus = async (
 
 export const getDriverWallet = async (userId: string | undefined) => {
   const driver = await findDriverByUserId(userId);
-  const wallet = await WalletModel.findOne({ user_id: driver._id }).lean();
+  const [wallet, due, txns] = await Promise.all([
+    WalletModel.findOne({ user_id: driver._id }).lean(),
+    DriverDueModel.findOne({ driver_id: driver._id }).lean(),
+    WalletTransactionModel.find({ user_id: driver._id })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean(),
+  ]);
+
+  const rideIds = txns
+    .map((t) => t.ride_id)
+    .filter((id): id is NonNullable<typeof id> => Boolean(id));
+
+  const rides = rideIds.length
+    ? await RideModel.find({ _id: { $in: rideIds } })
+        .select(
+          "pickup drop fare payment_mode payment_status driver_earning commission_amount vehicle_type_id customer_id completed_at status createdAt updatedAt"
+        )
+        .lean()
+    : [];
+  const rideMap = new Map(rides.map((r) => [String(r._id), r]));
+
+  const customerIds = [
+    ...new Set(rides.map((r) => String(r.customer_id)).filter(Boolean)),
+  ];
+  const vehicleTypeIds = [
+    ...new Set(rides.filter((r) => r.vehicle_type_id).map((r) => String(r.vehicle_type_id))),
+  ];
+
+  const [customers, vehicleTypes] = await Promise.all([
+    customerIds.length
+      ? UserModel.find({ _id: { $in: customerIds } }).select("name phone email").lean()
+      : [],
+    vehicleTypeIds.length
+      ? VehicleTypeModel.find({ _id: { $in: vehicleTypeIds } }).select("name code").lean()
+      : [],
+  ]);
+  const customerMap = new Map(customers.map((c) => [String(c._id), c]));
+  const vehicleMap = new Map(vehicleTypes.map((v) => [String(v._id), v]));
+
+  const transactions = txns.map((t) => {
+    const ride = t.ride_id ? rideMap.get(String(t.ride_id)) : null;
+    const customer = ride ? customerMap.get(String(ride.customer_id)) : null;
+    const vehicle = ride?.vehicle_type_id
+      ? vehicleMap.get(String(ride.vehicle_type_id))
+      : null;
+    return {
+      id: String(t._id),
+      rideId: t.ride_id ? String(t.ride_id) : null,
+      type: t.type,
+      amount: t.amount,
+      fare: t.fare ?? ride?.fare ?? 0,
+      commission: t.commission ?? 0,
+      method: t.payment_mode ?? "CASH",
+      payment_status: t.payment_status ?? "SUCCESS",
+      date: t.createdAt ?? null,
+      description: t.description ?? "",
+      customer: customer
+        ? { name: customer.name, phone: customer.phone ?? null }
+        : null,
+      pickup: ride?.pickup ?? null,
+      drop: ride?.drop ?? null,
+      vehicle_type: vehicle?.name ?? null,
+      ride_status: ride?.status ?? null,
+      completed_at: ride?.completed_at ?? ride?.updatedAt ?? null,
+    };
+  });
 
   return {
     balance: wallet?.balance ?? 0,
     total_earned: wallet?.total_earned ?? 0,
+    pending: due?.due_amount ?? 0,
+    pending_amount: due?.due_amount ?? 0,
+    transactions,
     updatedAt: wallet?.updatedAt ?? null,
   };
 };
@@ -600,7 +671,7 @@ export const getDriverTotalEarnings = async (userId: string | undefined) => {
   return {
     onlineEarnings,
     cashEarningsDue,
-    totalEarnings: onlineEarnings + cashEarningsDue,
+    totalEarnings: onlineEarnings,
   };
 };
 
@@ -622,32 +693,109 @@ export const getDriverEarningsSummary = async (
     since = new Date(now - 365 * 24 * 60 * 60 * 1000);
   }
 
-  const [wallet, due, periodAgg, totalTrips] = await Promise.all([
+  const [wallet, due, rides, totalTrips] = await Promise.all([
     WalletModel.findOne({ user_id: driver._id }).lean(),
     DriverDueModel.findOne({ driver_id: driver._id }).lean(),
-    RideModel.aggregate<{ value: number; trips: number }>([
-      {
-        $match: {
-          driver_id: driver._id,
-          status: "COMPLETED",
-          updatedAt: { $gte: since },
-        },
-      },
-      { $group: { _id: null, value: { $sum: "$fare" }, trips: { $sum: 1 } } },
-    ]),
+    RideModel.find({
+      driver_id: driver._id,
+      status: "COMPLETED",
+      $or: [
+        { completed_at: { $gte: since } },
+        { completed_at: { $exists: false }, updatedAt: { $gte: since } },
+      ],
+    })
+      .sort({ completed_at: -1, updatedAt: -1 })
+      .lean(),
     RideModel.countDocuments({ driver_id: driver._id, status: "COMPLETED" }),
   ]);
 
-  const periodEarnings = periodAgg[0]?.value ?? 0;
-  const periodTrips = periodAgg[0]?.trips ?? 0;
+  const customerIds = [...new Set(rides.map((r) => String(r.customer_id)))];
+  const vehicleTypeIds = [
+    ...new Set(rides.filter((r) => r.vehicle_type_id).map((r) => String(r.vehicle_type_id))),
+  ];
+  const [customers, vehicleTypes] = await Promise.all([
+    customerIds.length
+      ? UserModel.find({ _id: { $in: customerIds } }).select("name phone").lean()
+      : [],
+    vehicleTypeIds.length
+      ? VehicleTypeModel.find({ _id: { $in: vehicleTypeIds } }).select("name").lean()
+      : [],
+  ]);
+  const customerMap = new Map(customers.map((c) => [String(c._id), c]));
+  const vehicleMap = new Map(vehicleTypes.map((v) => [String(v._id), v.name]));
+
+  let totalFare = 0;
+  let cashFare = 0;
+  let onlineFare = 0;
+  let totalCommission = 0;
+  let totalNet = 0;
+  const ridesList = rides.map((ride) => {
+    const fare = Number(ride.fare ?? 0);
+    const computed = calculateCommission(fare);
+    const commission = Number(ride.commission_amount ?? computed.commission);
+    const net = Number(ride.driver_earning ?? computed.driverAmount);
+    totalFare += fare;
+    totalCommission += commission;
+    totalNet += net;
+    if ((ride.payment_mode ?? "CASH") === "CASH") cashFare += fare;
+    else onlineFare += fare;
+
+    const customer = customerMap.get(String(ride.customer_id));
+    return {
+      ride_id: String(ride._id),
+      fare,
+      driver_earning: net,
+      commission,
+      payment_mode: ride.payment_mode ?? "CASH",
+      payment_status: ride.payment_status ?? "SUCCESS",
+      status: ride.status,
+      pickup: ride.pickup,
+      drop: ride.drop,
+      customer: customer
+        ? { name: customer.name, phone: customer.phone ?? null }
+        : null,
+      vehicle_type: ride.vehicle_type_id
+        ? vehicleMap.get(String(ride.vehicle_type_id)) ?? null
+        : null,
+      completed_at: ride.completed_at ?? ride.updatedAt ?? null,
+      createdAt: ride.createdAt ?? null,
+    };
+  });
+
+  // Daily breakdown for charts
+  const dailyMap = new Map<string, { earnings: number; rides: number }>();
+  for (const ride of ridesList) {
+    const d = ride.completed_at ? new Date(ride.completed_at) : null;
+    if (!d || Number.isNaN(d.getTime())) continue;
+    const key = d.toISOString().slice(0, 10);
+    const cur = dailyMap.get(key) ?? { earnings: 0, rides: 0 };
+    cur.earnings += ride.driver_earning;
+    cur.rides += 1;
+    dailyMap.set(key, cur);
+  }
+  const daily_breakdown = [...dailyMap.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([date, v]) => ({ date, earnings: v.earnings, rides: v.rides }));
 
   return {
     period,
-    period_earnings: periodEarnings,
-    period_trips: periodTrips,
+    period_label: period,
+    total: totalNet,
+    rides: ridesList.length,
+    hours: 0,
+    cash: cashFare,
+    card: 0,
+    digital: onlineFare,
+    commission: totalCommission,
+    net: totalNet,
+    commission_percent: 20,
+    period_earnings: totalNet,
+    period_trips: ridesList.length,
     wallet_balance: wallet?.balance ?? 0,
     online_earnings: wallet?.total_earned ?? 0,
     cash_due: due?.due_amount ?? 0,
     total_completed_trips: totalTrips,
+    daily_breakdown,
+    rides_list: ridesList,
   };
 };

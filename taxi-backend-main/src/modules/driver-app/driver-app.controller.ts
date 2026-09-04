@@ -295,7 +295,13 @@ export const rejectRideRequestController = async (req: Request, res: Response, n
 
 export const cancelRideController = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const data = await cancelRide(userIdFromRequest(req), req.body.ride_id);
+    const reason =
+      typeof req.body?.reason === "string"
+        ? req.body.reason
+        : typeof req.body?.cancellation_reason === "string"
+          ? req.body.cancellation_reason
+          : undefined;
+    const data = await cancelRide(userIdFromRequest(req), req.body.ride_id, reason);
     return res.status(200).json(data);
   } catch (error) {
     return next(error);
@@ -313,7 +319,11 @@ export const rideArrivedController = async (req: Request, res: Response, next: N
 
 export const startRideController = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const data = await startRide(userIdFromRequest(req), req.body.ride_id);
+    const data = await startRide(
+      userIdFromRequest(req),
+      req.body.ride_id,
+      Number(req.body.otp)
+    );
     return res.status(200).json(data);
   } catch (error) {
     return next(error);

@@ -295,7 +295,11 @@ export const registerRideBookingHandlers = (io: Server, socket: SocketWithIdenti
 
   socket.on("ride:start", async (payload: RideLifecyclePayload) => {
     try {
-      await onRideStatusEvent(payload, "ARRIVED_AT_PICKUP", "STARTED", "ride:start");
+      // Pickup OTP must be verified via REST — do not allow socket to skip OTP.
+      throw new HttpError(
+        400,
+        "Use POST /api/drivers/rides/:rideId/verify-otp to start the ride after pickup OTP"
+      );
     } catch (error) {
       logger.warn({ error, socketId: socket.id, payload }, "ride:start failed");
       emitSocketError(socket, error);

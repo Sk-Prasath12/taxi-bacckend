@@ -33,6 +33,12 @@ import { WithdrawModel } from "../withdraw/withdraw.model";
 import { RatingModel } from "../rating/rating.model";
 import { TicketMessageModel } from "../support/ticket-message.model";
 import { TicketModel } from "../support/ticket.model";
+import {
+  assertRideCancellable,
+  applyCancellationFields,
+} from "../common/ride-cancel.util";
+import { emitToRoom } from "../../socket/socket-emit.service";
+import { emitAdminRideUpdate } from "../../utils/ride-socket-events.util";
 
 const driverLocationMap = new Map<string, { latitude: number; longitude: number; updatedAt: string }>();
 const driverSettingsMap = new Map<string, Record<string, unknown>>();
@@ -260,23 +266,59 @@ export const rejectRideRequest = async (userId: string, rideId: string) => {
   return await rejectIncomingRide(userId, rideId);
 };
 
-export const cancelRide = async (_userId: string, rideId: string) => {
+export const cancelRide = async (
+  userId: string,
+  rideId: string,
+  reasonInput?: string
+) => {
   const ride = await RideModel.findById(rideId);
   if (!ride) throw new HttpError(404, "Ride not found");
-  if (ride.status === "COMPLETED" || ride.status === "CANCELLED") {
-    throw new HttpError(400, "Ride cannot be cancelled");
+  if (String(ride.driver_id) !== String(userId)) {
+    throw new HttpError(403, "You are not assigned to this ride");
   }
-  ride.status = "CANCELLED";
+
+  assertRideCancellable(ride);
+  applyCancellationFields(ride, "DRIVER", reasonInput);
   await ride.save();
-  return { success: true, ride_id: rideId, message: "Ride cancelled" };
+
+  await UserModel.updateOne(
+    { _id: userId, role: "DRIVER" },
+    { $set: { driver_status: "ONLINE" } }
+  );
+
+  const payload = {
+    ride_id: rideId,
+    status: "CANCELLED" as const,
+    cancelled_by: ride.cancelled_by,
+    cancellation_reason: ride.cancellation_reason,
+    cancelled_at: ride.cancelled_at,
+    previous_status: ride.previous_status,
+  };
+
+  await emitToRoom(`customer_${String(ride.customer_id)}`, "ride_cancelled", payload);
+  await emitToRoom(`customer_${String(ride.customer_id)}`, "ride_status_update", payload);
+  await emitToRoom(`ride_${rideId}`, "ride_status_update", payload);
+  await emitToRoom(`driver_${userId}`, "ride_cancelled", payload);
+  void emitAdminRideUpdate("ride_cancelled", {
+    ...payload,
+    customer_id: String(ride.customer_id),
+    driver_id: userId,
+  });
+
+  return {
+    success: true,
+    message: "Ride cancelled",
+    ...payload,
+  };
 };
 
 export const rideArrived = async (userId: string, rideId: string) =>
   await markRideArrivedAtPickup(userId, rideId);
-export const startRide = async (userId: string, rideId: string) => {
-  const ride = await RideModel.findOne({ _id: rideId, driver_id: new Types.ObjectId(userId) }).lean();
-  if (!ride) throw new HttpError(404, "Ride not found");
-  return await verifyRideOtpAndStartRide(userId, rideId, ride.otp);
+export const startRide = async (userId: string, rideId: string, otpInput?: number) => {
+  if (otpInput == null || !Number.isFinite(otpInput)) {
+    throw new HttpError(400, "Pickup OTP is required to start the ride");
+  }
+  return await verifyRideOtpAndStartRide(userId, rideId, otpInput);
 };
 export const confirmPickup = async (userId: string, rideId: string) =>
   await markRidePickedUp(userId, rideId);
@@ -289,19 +331,39 @@ export const fetchCurrentRide = async (userId: string) => {
   await ensureDriver(userId);
   const ride = await RideModel.findOne({
     driver_id: new Types.ObjectId(userId),
-    status: { $in: ["DRIVER_ASSIGNED", "ARRIVED_AT_PICKUP", "STARTED", "PICKED_UP", "IN_TRANSIT"] },
+    status: {
+      $in: ["DRIVER_ASSIGNED", "ARRIVED_AT_PICKUP", "STARTED", "PICKED_UP", "IN_TRANSIT"],
+    },
   })
     .sort({ updatedAt: -1 })
     .lean();
-  return ride
-    ? {
-        ride_id: String(ride._id),
-        status: ride.status,
-        pickup: ride.pickup,
-        drop: ride.drop,
-        fare: ride.fare,
-      }
-    : { ride: null };
+
+  if (!ride) return { ride: null };
+
+  return {
+    ride_id: String(ride._id),
+    id: String(ride._id),
+    status: ride.status,
+    pickup: ride.pickup,
+    drop: ride.drop,
+    fare: ride.fare,
+    payment_mode: ride.payment_mode ?? "CASH",
+    payment_status: ride.payment_status ?? "PENDING",
+    otp: ride.otp ?? null,
+    otp_verified: Boolean(ride.otp_verified),
+    drop_otp: (ride as { drop_otp?: number }).drop_otp ?? null,
+    drop_otp_verified: Boolean((ride as { drop_otp_verified?: boolean }).drop_otp_verified),
+    drop_reached: Boolean((ride as { drop_reached?: boolean }).drop_reached),
+    driver_earning: ride.driver_earning ?? null,
+    finance_processed: Boolean(ride.finance_processed),
+    accepted_at: ride.accepted_at ?? null,
+    trip_started_at: ride.trip_started_at ?? null,
+    completed_at: ride.completed_at ?? null,
+    can_cancel:
+      !ride.otp_verified &&
+      !ride.trip_started_at &&
+      ["DRIVER_ASSIGNED", "ARRIVED_AT_PICKUP"].includes(ride.status),
+  };
 };
 
 export const calculateFareEstimate = async (payload: any) => {
@@ -331,18 +393,11 @@ export const fetchFareDetails = async (userId: string, rideId: string) => {
 export const fetchWalletBalance = async (userId: string) => await getDriverWallet(userId);
 
 export const fetchWalletTransactions = async (userId: string) => {
-  const withdrawals = await WithdrawModel.find({ driver_id: new Types.ObjectId(userId) })
-    .sort({ createdAt: -1 })
-    .limit(50)
-    .lean();
+  const wallet = await getDriverWallet(userId);
   return {
-    transactions: withdrawals.map((item) => ({
-      id: String(item._id),
-      type: "DEBIT",
-      amount: item.amount,
-      status: item.status,
-      createdAt: item.createdAt,
-    })),
+    balance: wallet.balance,
+    total_earned: wallet.total_earned,
+    transactions: wallet.transactions ?? [],
   };
 };
 

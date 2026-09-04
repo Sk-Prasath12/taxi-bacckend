@@ -102,6 +102,20 @@ class DriverApi {
     return null;
   }
 
+  Future<ApiResult> cancelRideResult(String rideId, {String? reason}) async {
+    return client.postResult(
+      '${ApiConstants.driverBase}/rides/$rideId/cancel',
+      body: {
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+      },
+    );
+  }
+
+  Future<bool> cancelRide(String rideId, {String? reason}) async {
+    final result = await cancelRideResult(rideId, reason: reason);
+    return result.success;
+  }
+
   Future<Map<String, dynamic>?> getInvoice(String rideId) async {
     final result =
         await client.getJson('${ApiConstants.driverInvoiceBase}/invoices/$rideId');
@@ -410,6 +424,23 @@ class DriverApi {
       body: {'otp': otpValue},
     );
     return ApiResult.fromResponse(response.statusCode, client.decode(response));
+  }
+
+  Future<ApiResult> cancelAssignedRideResult(String rideId, {String? reason}) async {
+    final response = await client.post(
+      '${ApiConstants.driverBase}/rides/$rideId/cancel',
+      body: {
+        if (reason != null && reason.trim().isNotEmpty) 'reason': reason.trim(),
+        if (reason != null && reason.trim().isNotEmpty) 'cancellation_reason': reason.trim(),
+      },
+    );
+    return ApiResult.fromResponse(response.statusCode, client.decode(response));
+  }
+
+  Future<bool> cancelAssignedRide(String rideId, {String? reason}) async {
+    final result = await cancelAssignedRideResult(rideId, reason: reason);
+    return result.success ||
+        (result.message ?? '').toLowerCase().contains('cancelled');
   }
 
   Future<ApiResult> confirmCashReceivedResult(String rideId) async {

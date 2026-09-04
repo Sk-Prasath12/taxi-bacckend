@@ -13,6 +13,7 @@ class WalletPage extends StatefulWidget {
 
 class _WalletPageState extends State<WalletPage> {
   double _walletBalance = 0;
+  double _totalEarned = 0;
   double _pendingAmount = 0;
   Future<Map<String, dynamic>?>? _walletFuture;
   List<Map<String, dynamic>> _transactions = [];
@@ -41,31 +42,57 @@ class _WalletPageState extends State<WalletPage> {
           mapped.add(_mapWalletTransaction(t));
         }
       }
-      setState(() {
-        _walletBalance = (data['balance'] as num?)?.toDouble() ?? 0;
-        _pendingAmount = (data['pending'] as num?)?.toDouble() ??
-            (data['pending_amount'] as num?)?.toDouble() ?? 0;
-        _transactions = mapped;
-      });
+      if (mounted) {
+        setState(() {
+          _walletBalance = (data['balance'] as num?)?.toDouble() ?? 0;
+          _totalEarned = (data['total_earned'] as num?)?.toDouble() ?? 0;
+          _pendingAmount = (data['pending'] as num?)?.toDouble() ??
+              (data['pending_amount'] as num?)?.toDouble() ??
+              0;
+          _transactions = mapped;
+        });
+      }
     }
     return wallet;
   }
 
   Map<String, dynamic> _mapWalletTransaction(Map<String, dynamic> t) {
     final amount = (t['amount'] as num?)?.toDouble() ?? 0;
-    final method = t['method']?.toString() ?? 'RAZORPAY';
-    final dt = DateTime.tryParse(t['date']?.toString() ?? '');
+    final method = (t['method'] ?? t['payment_mode'] ?? 'ONLINE').toString();
+    final dt = DateTime.tryParse(t['date']?.toString() ?? t['createdAt']?.toString() ?? '');
     final dateStr = dt != null
         ? DateFormat('MMM d, y • h:mm a').format(dt.toLocal())
         : '—';
     final label = _paymentMethodLabel(method);
+    final rideId = (t['rideId'] ?? t['ride_id'] ?? '').toString();
+    final customerObj = t['customer'];
+    final customer = customerObj is Map
+        ? customerObj['name']?.toString()
+        : t['customer_name']?.toString();
+    final pickup = t['pickup'] is Map ? (t['pickup'] as Map)['address']?.toString() : null;
+    final drop = t['drop'] is Map ? (t['drop'] as Map)['address']?.toString() : null;
+    final fare = (t['fare'] as num?)?.toDouble();
+    final vehicle = t['vehicle_type']?.toString();
+    final paymentStatus = t['payment_status']?.toString() ?? 'SUCCESS';
+    final parts = <String>[
+      if (rideId.isNotEmpty) 'Ride #$rideId',
+      if (customer != null && customer.isNotEmpty) customer,
+      if (vehicle != null && vehicle.isNotEmpty) vehicle,
+      if (pickup != null && pickup.isNotEmpty) pickup,
+      if (drop != null && drop.isNotEmpty) '→ $drop',
+      if (fare != null) 'Fare ₹${fare.toStringAsFixed(0)}',
+      '$label · $paymentStatus',
+    ];
     return {
-      'id': t['id'] ?? t['rideId'] ?? dateStr,
+      'id': t['id'] ?? rideId ?? dateStr,
       'type': amount >= 0 ? 'credit' : 'debit',
-      'title': 'Ride earnings',
-      'description': '$label • Ride ${t['rideId'] ?? ''}'.trim(),
+      'title': amount >= 0 ? 'Ride earnings' : 'Withdrawal',
+      'description': parts.where((e) => e.trim().isNotEmpty).join(' · '),
       'amount': amount,
       'date': dateStr,
+      'rideId': rideId,
+      'fare': fare,
+      'payment_status': paymentStatus,
       'icon': Icons.account_balance_wallet,
       'color': Colors.green,
     };
@@ -107,28 +134,9 @@ class _WalletPageState extends State<WalletPage> {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final walletData = snapshot.data;
-          final walletBalance = (walletData?['balance'] as num?)?.toDouble() ?? _walletBalance;
-          final pendingAmount = (walletData?['pending'] as num?)?.toDouble() ??
-              (walletData?['pending_amount'] as num?)?.toDouble() ??
-              _pendingAmount;
-          final transactions = (walletData?['transactions'] as List<dynamic>?)
-                  ?.map<Map<String, dynamic>>((item) {
-                if (item is Map<String, dynamic>) {
-                  return {
-                    'id': item['id'] ?? item['_id'] ?? item['transaction_id'],
-                    'type': item['type'] ?? 'credit',
-                    'title': item['title'] ?? item['description'] ?? 'Transaction',
-                    'description': item['description'] ?? '',
-                    'amount': (item['amount'] as num?)?.toDouble() ?? 0.0,
-                    'date': item['date'] ?? item['created_at'] ?? 'Unknown',
-                    'icon': Icons.attach_money,
-                    'color': item['type'] == 'debit' ? Colors.red : Colors.green,
-                  };
-                }
-                return <String, dynamic>{};
-              }).toList() ??
-              _transactions;
+          final walletBalance = _walletBalance;
+          final pendingAmount = _pendingAmount;
+          final transactions = _transactions;
 
           return RefreshIndicator(
             onRefresh: () async {
@@ -214,12 +222,17 @@ class _WalletPageState extends State<WalletPage> {
           ),
           const SizedBox(height: 12),
           Text(
-            '₹${_walletBalance.toStringAsFixed(2)}',
+            '₹${balance.toStringAsFixed(2)}',
             style: const TextStyle(
               fontSize: 42,
               fontWeight: FontWeight.bold,
               color: AppColors.cardDark,
             ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Total earned ₹${_totalEarned.toStringAsFixed(2)} (cash + online)',
+            style: const TextStyle(fontSize: 13, color: Colors.white70),
           ),
           const SizedBox(height: 24),
           Row(
@@ -227,8 +240,8 @@ class _WalletPageState extends State<WalletPage> {
               Expanded(
                 child: _buildBalanceInfo(
                   icon: Icons.pending_actions,
-                  label: 'Pending',
-                  value: '₹${_pendingAmount.toStringAsFixed(2)}',
+                  label: 'Commission due',
+                  value: '₹${pending.toStringAsFixed(2)}',
                 ),
               ),
               Container(

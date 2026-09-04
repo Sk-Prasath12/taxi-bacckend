@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import {
   acceptIncomingRide,
+  cancelAssignedRide,
   completeRideAfterPayment,
   confirmCashReceived,
   getDriverActiveRide,
@@ -48,6 +49,21 @@ export const getIncomingRidesController = async (req: Request, res: Response, ne
 export const rejectIncomingRideController = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const data = await rejectIncomingRide(req.authUser?.userId, getRideIdParam(req));
+    return res.status(200).json(data);
+  } catch (error) {
+    return next(error);
+  }
+};
+
+export const cancelAssignedRideController = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const reason =
+      typeof req.body?.reason === "string"
+        ? req.body.reason
+        : typeof req.body?.cancellation_reason === "string"
+          ? req.body.cancellation_reason
+          : undefined;
+    const data = await cancelAssignedRide(req.authUser?.userId, getRideIdParam(req), reason);
     return res.status(200).json(data);
   } catch (error) {
     return next(error);

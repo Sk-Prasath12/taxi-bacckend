@@ -11,6 +11,7 @@ import '../widgets/ride_flow_scaffold.dart';
 import '../widgets/ride_map_widget.dart';
 import '../widgets/ride_nav_banner.dart';
 import '../widgets/slide_to_confirm.dart';
+import '../widgets/driver_cancel_ride.dart';
 
 /// Page 1 — Ride accepted: OSRM navigation to pickup, swipe ARRIVED.
 class RideAcceptedPage extends StatefulWidget {
@@ -92,6 +93,8 @@ class _RideAcceptedPageState extends State<RideAcceptedPage> {
         final ride = _flow.ride;
         final phone = _flow.customerPhone();
         final nearPickup = _flow.isNearPickup;
+        final canCancel = ride['otp_verified'] != true &&
+            !['STARTED', 'PICKED_UP', 'IN_TRANSIT', 'COMPLETED'].contains(_flow.status.toUpperCase());
 
         return RideFlowScaffold(
           title: 'Ride Accepted',
@@ -155,6 +158,14 @@ class _RideAcceptedPageState extends State<RideAcceptedPage> {
                 ),
               ],
             ),
+            if (canCancel) ...[
+              const SizedBox(height: 8),
+              OutlinedButton.icon(
+                onPressed: _loading ? null : () => showDriverCancelRideDialog(context),
+                icon: const Icon(Icons.cancel_outlined, color: AppColors.danger),
+                label: const Text('Cancel Ride', style: TextStyle(color: AppColors.danger)),
+              ),
+            ],
             const SizedBox(height: 12),
             RideMapWidget(
               driver: _flow.currentLocation ?? _flow.pickup,

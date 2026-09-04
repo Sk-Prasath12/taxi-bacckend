@@ -1,37 +1,44 @@
-/** Single source of truth for vehicle types across Customer, Driver, Admin, and Backend. */
+/** Single source of truth — only these four vehicle types. */
 export const CANONICAL_VEHICLE_TYPES = [
   { code: "BIKE", name: "Bike", per_km_rate: 10, max_passengers: 1 },
   { code: "AUTO", name: "Auto", per_km_rate: 20, max_passengers: 3 },
-  { code: "MINI", name: "Mini", per_km_rate: 30, max_passengers: 4 },
-  { code: "SEDAN", name: "Sedan", per_km_rate: 40, max_passengers: 4 },
-  { code: "SUV", name: "SUV", per_km_rate: 50, max_passengers: 6 },
-  { code: "PREMIUM_SEDAN", name: "Premium Sedan", per_km_rate: 60, max_passengers: 4 },
-  { code: "PREMIUM_SUV", name: "Premium SUV", per_km_rate: 70, max_passengers: 7 },
-  { code: "XL", name: "XL", per_km_rate: 80, max_passengers: 12 },
-  { code: "ELECTRIC", name: "Electric", per_km_rate: 90, max_passengers: 4 },
-  { code: "ACCESSIBLE", name: "Accessible", per_km_rate: 100, max_passengers: 4 },
+  { code: "FIVE_SEATER", name: "5 Seater", per_km_rate: 35, max_passengers: 5 },
+  { code: "SEVEN_SEATER", name: "7 Seater", per_km_rate: 55, max_passengers: 7 },
 ] as const;
 
 export type CanonicalVehicleCode = (typeof CANONICAL_VEHICLE_TYPES)[number]["code"];
 
 /**
  * Legacy DB names / codes → current display name.
- * Old overlapping categories (Luxury, Hybrid, Van, 5/7 Seater) map into the nearest canonical type.
  */
 export const LEGACY_VEHICLE_NAME_ALIASES: Record<string, string> = {
-  "Small 5 Seater Car": "Mini",
-  "5 Seater": "Mini",
-  "Big 7 Seater Car": "Premium SUV",
-  "7 Seater": "Premium SUV",
+  Mini: "5 Seater",
+  Sedan: "5 Seater",
+  SUV: "7 Seater",
+  "Premium Sedan": "5 Seater",
+  "Premium SUV": "7 Seater",
+  XL: "7 Seater",
+  Electric: "5 Seater",
+  Accessible: "5 Seater",
+  "Small 5 Seater Car": "5 Seater",
+  "5 Seater": "5 Seater",
+  "Big 7 Seater Car": "7 Seater",
+  "7 Seater": "7 Seater",
   Motorbike: "Bike",
   "Two Wheeler": "Bike",
-  Hatchback: "Mini",
-  Luxury: "Premium Sedan",
-  Van: "XL",
-  Hybrid: "Electric",
-  "Premium": "Premium Sedan",
-  CAR_5_SEATER: "Mini",
-  CAR_7_SEATER: "Premium SUV",
+  Hatchback: "5 Seater",
+  Luxury: "5 Seater",
+  Van: "7 Seater",
+  Hybrid: "5 Seater",
+  Premium: "5 Seater",
+  CAR_5_SEATER: "5 Seater",
+  CAR_7_SEATER: "7 Seater",
+  MINI: "5 Seater",
+  SEDAN: "5 Seater",
+  PREMIUM_SEDAN: "5 Seater",
+  PREMIUM_SUV: "7 Seater",
+  ELECTRIC: "5 Seater",
+  ACCESSIBLE: "5 Seater",
 };
 
 export const canonicalVehicleCodes = (): CanonicalVehicleCode[] =>
@@ -46,7 +53,10 @@ export const normalizeVehicleDisplayName = (name: string): string =>
 export const vehicleCodeFromName = (name: string): CanonicalVehicleCode | null => {
   const normalized = normalizeVehicleDisplayName(name);
   const match = CANONICAL_VEHICLE_TYPES.find(
-    (v) => v.name === normalized || v.code === normalized.toUpperCase().replace(/\s+/g, "_")
+    (v) =>
+      v.name === normalized ||
+      v.code === normalized.toUpperCase().replace(/\s+/g, "_") ||
+      v.code === name.trim().toUpperCase().replace(/\s+/g, "_")
   );
   return match?.code ?? null;
 };

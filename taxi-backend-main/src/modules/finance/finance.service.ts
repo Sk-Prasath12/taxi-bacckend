@@ -6,16 +6,23 @@ import { UserModel } from "../users/users.model";
 import { AdminRevenueModel } from "./admin-revenue.model";
 import { DriverDueModel } from "./driver-due.model";
 import { WalletModel } from "./wallet.model";
+import { WalletTransactionModel } from "./wallet-transaction.model";
 
+/**
+ * Idempotent finance settlement for a completed ride.
+ * Uses finance_processed lock + unique ride_id wallet transaction.
+ */
 export const processRidePayment = async (rideInput: RideDocument) => {
   const ride = await RideModel.findById(rideInput._id);
   if (!ride) {
-    return;
+    return null;
   }
 
   if (ride.status !== "COMPLETED" || ride.payment_status !== "SUCCESS" || !ride.driver_id) {
-    return;
+    return null;
   }
+
+  const { commission, driverAmount } = calculateCommission(ride.fare);
 
   const lockedRide = await RideModel.findOneAndUpdate(
     {
@@ -23,73 +30,143 @@ export const processRidePayment = async (rideInput: RideDocument) => {
       finance_processed: { $ne: true },
     },
     {
-      $set: { finance_processed: true },
+      $set: {
+        finance_processed: true,
+        driver_earning: driverAmount,
+        commission_amount: commission,
+      },
     },
     { new: true }
   );
 
   if (!lockedRide) {
-    return;
+    // Already processed — ensure earning fields exist for history.
+    if (ride.driver_earning == null) {
+      await RideModel.updateOne(
+        { _id: ride._id },
+        { $set: { driver_earning: driverAmount, commission_amount: commission } }
+      );
+    }
+    return {
+      already_processed: true,
+      commission,
+      driverAmount,
+    };
   }
 
-  const { commission, driverAmount } = calculateCommission(ride.fare);
+  const isOnline = ride.payment_mode === "ONLINE";
+  const balanceDelta = isOnline ? driverAmount : 0;
 
-  if (ride.payment_mode === "ONLINE") {
+  let txnCreated = false;
+  try {
+    await WalletTransactionModel.create({
+      user_id: ride.driver_id,
+      ride_id: ride._id,
+      type: "RIDE_EARNING",
+      amount: driverAmount,
+      balance_delta: balanceDelta,
+      fare: ride.fare,
+      commission,
+      payment_mode: ride.payment_mode ?? "CASH",
+      payment_status: "SUCCESS",
+      description: isOnline
+        ? `Online ride earning for ride ${ride.id}`
+        : `Cash ride earning for ride ${ride.id}`,
+    });
+    txnCreated = true;
+  } catch (error: unknown) {
+    const code = (error as { code?: number })?.code;
+    // Duplicate key = wallet already credited for this rideId — do NOT $inc again.
+    if (code === 11000) {
+      const wallet = await WalletModel.findOne({ user_id: ride.driver_id }).lean();
+      const payload = {
+        ride_id: String(ride.id),
+        amount: driverAmount,
+        fare: ride.fare,
+        commission,
+        payment_mode: ride.payment_mode ?? "CASH",
+        payment_status: "SUCCESS",
+        finance_processed: true,
+        wallet_balance: wallet?.balance ?? 0,
+        total_earned: wallet?.total_earned ?? 0,
+        already_processed: true,
+      };
+      await emitToRoom(`driver_${String(ride.driver_id)}`, "driver_wallet_updated", payload);
+      await emitToRoom(`driver_${String(ride.driver_id)}`, "wallet_updated", payload);
+      return { already_processed: true, commission, driverAmount, wallet };
+    }
+    // Roll back finance flag so a retry can settle.
+    await RideModel.updateOne({ _id: ride._id }, { $set: { finance_processed: false } });
+    throw error;
+  }
+
+  if (!txnCreated) {
+    return { already_processed: true, commission, driverAmount };
+  }
+
+  if (isOnline) {
     await WalletModel.findOneAndUpdate(
       { user_id: ride.driver_id },
       { $inc: { balance: driverAmount, total_earned: driverAmount } },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    await AdminRevenueModel.create({
-      ride_id: ride._id,
-      amount: commission,
-      source: "ONLINE",
-    });
+    try {
+      await AdminRevenueModel.create({
+        ride_id: ride._id,
+        amount: commission,
+        source: "ONLINE",
+      });
+    } catch (error: unknown) {
+      if ((error as { code?: number })?.code !== 11000) throw error;
+    }
+  } else {
+    // CASH: driver keeps fare; track earnings; platform commission becomes due.
+    await WalletModel.findOneAndUpdate(
+      { user_id: ride.driver_id },
+      { $inc: { total_earned: driverAmount } },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
 
-    await emitToRoom(`driver_${String(ride.driver_id)}`, "driver_wallet_updated", {
+    await DriverDueModel.findOneAndUpdate(
+      { driver_id: ride.driver_id },
+      { $inc: { due_amount: commission } },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    try {
+      await AdminRevenueModel.create({
+        ride_id: ride._id,
+        amount: commission,
+        source: "CASH",
+      });
+    } catch (error: unknown) {
+      if ((error as { code?: number })?.code !== 11000) throw error;
+    }
+
+    await emitToRoom(`driver_${String(ride.driver_id)}`, "driver_due_updated", {
       ride_id: String(ride.id),
-      amount: driverAmount,
-      payment_mode: "ONLINE",
-      finance_processed: true,
+      due_amount: commission,
     });
-    await emitToRoom(`driver_${String(ride.driver_id)}`, "wallet_updated", {
-      amount: driverAmount,
-      payment_mode: "ONLINE",
-    });
-    return;
   }
 
-  // CASH: driver keeps fare in hand; platform commission becomes due.
-  // Still track net earnings on wallet.total_earned so history/earnings UI stays accurate.
-  await WalletModel.findOneAndUpdate(
-    { user_id: ride.driver_id },
-    { $inc: { total_earned: driverAmount } },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
-  );
-
-  await DriverDueModel.findOneAndUpdate(
-    { driver_id: ride.driver_id },
-    { $inc: { due_amount: commission } },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
-  );
-
-  await AdminRevenueModel.create({
-    ride_id: ride._id,
-    amount: commission,
-    source: "CASH",
-  });
-
-  await emitToRoom(`driver_${String(ride.driver_id)}`, "driver_due_updated", {
-    ride_id: String(ride.id),
-    due_amount: commission,
-  });
-  await emitToRoom(`driver_${String(ride.driver_id)}`, "driver_wallet_updated", {
+  const wallet = await WalletModel.findOne({ user_id: ride.driver_id }).lean();
+  const payload = {
     ride_id: String(ride.id),
     amount: driverAmount,
-    payment_mode: "CASH",
+    fare: ride.fare,
+    commission,
+    payment_mode: ride.payment_mode ?? "CASH",
+    payment_status: "SUCCESS",
     finance_processed: true,
-  });
+    wallet_balance: wallet?.balance ?? 0,
+    total_earned: wallet?.total_earned ?? 0,
+  };
+
+  await emitToRoom(`driver_${String(ride.driver_id)}`, "driver_wallet_updated", payload);
+  await emitToRoom(`driver_${String(ride.driver_id)}`, "wallet_updated", payload);
+
+  return { already_processed: false, commission, driverAmount, wallet };
 };
 
 export const getRevenueSummary = async () => {
@@ -182,7 +259,15 @@ const bucketByDay = (
 export const getAdminDashboardMetrics = async () => {
   const todayStart = getDayStart(new Date());
   const tomorrowStart = new Date(todayStart.getTime() + DAY_MS);
-  const activeTripStatuses = ["PENDING_CONFIRMATION", "SEARCHING_DRIVER", "DRIVER_ASSIGNED", "ARRIVED_AT_PICKUP", "STARTED", "PICKED_UP", "IN_TRANSIT"];
+  const activeTripStatuses = [
+    "PENDING_CONFIRMATION",
+    "SEARCHING_DRIVER",
+    "DRIVER_ASSIGNED",
+    "ARRIVED_AT_PICKUP",
+    "STARTED",
+    "PICKED_UP",
+    "IN_TRANSIT",
+  ];
   const sevenDayBuckets = buildDateBuckets(7);
   const sevenDayStart = sevenDayBuckets[0].dayStart;
   const sevenDayEnd = sevenDayBuckets[6].nextDay;

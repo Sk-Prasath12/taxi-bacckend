@@ -3,6 +3,7 @@ import { validate } from "../../../middlewares/validate.middleware";
 import {
   acceptIncomingRideByBodyController,
   acceptIncomingRideController,
+  cancelAssignedRideController,
   getDriverActiveRideController,
   getDriverRideByIdController,
   getDriverRideHistoryController,
@@ -45,6 +46,11 @@ driverRideRouter.post(
   "/api/drivers/rides/:rideId/reject",
   validate(driverRideIdParamSchema),
   rejectIncomingRideController
+);
+driverRideRouter.post(
+  "/api/drivers/rides/:rideId/cancel",
+  validate(driverRideIdParamSchema),
+  cancelAssignedRideController
 );
 driverRideRouter.post(
   "/api/drivers/rides/accept",

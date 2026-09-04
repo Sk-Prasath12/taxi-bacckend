@@ -13,6 +13,11 @@ import { emitCustomerAndRide, emitAdminRideUpdate } from "../../../utils/ride-so
 import { toFlexibleClientStatus } from "../../../utils/ride-emit.util";
 import { getNearbyDriverRadiusKm } from "../../../utils/nearby-drivers.util";
 import { expireSearchingRideIfNeeded } from "../../../utils/ride-search-timeout.util";
+import {
+  assertRideCancellable,
+  applyCancellationFields,
+  CANCELLABLE_STATUSES,
+} from "../../common/ride-cancel.util";
 
 const ACTIVE_RIDE_BLOCKED_STATUSES = [
   "PENDING_CONFIRMATION",
@@ -99,10 +104,21 @@ const customerObjectId = (customerId: string): Types.ObjectId => {
 
 const emitRideCancelledEvents = async (ride: RideDocument): Promise<void> => {
   const rideId = ride.id;
-  const payload = { ride_id: rideId, status: "CANCELLED" };
+  const payload = {
+    ride_id: rideId,
+    status: "CANCELLED",
+    cancelled_by: ride.cancelled_by ?? null,
+    cancellation_reason: ride.cancellation_reason ?? null,
+    cancelled_at: ride.cancelled_at ?? null,
+    previous_status: ride.previous_status ?? null,
+  };
   await emitToRoom("drivers", "ride_cancelled", payload);
+  if (ride.driver_id) {
+    await emitToRoom(`driver_${String(ride.driver_id)}`, "ride_cancelled", payload);
+  }
   await emitToRoom(`ride_${rideId}`, "ride_status_update", payload);
   await emitToRoom(`customer_${String(ride.customer_id)}`, "ride_status_update", payload);
+  await emitToRoom(`customer_${String(ride.customer_id)}`, "ride_cancelled", payload);
   void emitAdminRideUpdate("ride_cancelled", {
     ...payload,
     customer_id: String(ride.customer_id),
@@ -119,7 +135,13 @@ const cancelAllActiveRidesForCustomer = async (customerId: string): Promise<stri
 
   const clearedIds: string[] = [];
   for (const ride of rides) {
-    ride.status = "CANCELLED";
+    try {
+      assertRideCancellable(ride);
+    } catch {
+      // Abandon only cancels pre-start rides; skip started ones.
+      continue;
+    }
+    applyCancellationFields(ride, "CUSTOMER", "Abandoned by customer");
     await ride.save();
     void emitRideCancelledEvents(ride);
     clearedIds.push(ride.id);
@@ -148,6 +170,10 @@ const mapRideSummary = (ride: RideDocument) => ({
 
 const mapRideDetails = async (ride: RideDocument) => {
   const driver = await getDriverDetails(ride.driver_id ? String(ride.driver_id) : null);
+  const canCancel =
+    CANCELLABLE_STATUSES.includes(ride.status) &&
+    !ride.otp_verified &&
+    !ride.trip_started_at;
 
   return {
     ride_id: ride.id,
@@ -159,6 +185,8 @@ const mapRideDetails = async (ride: RideDocument) => {
     distance_km: ride.distance_km,
     duration_min: ride.duration_min ?? FALLBACK_DURATION_MIN,
     fare: ride.fare,
+    driver_earning: ride.driver_earning ?? null,
+    commission_amount: ride.commission_amount ?? null,
     currency: "INR",
     status: ride.status,
     client_status: toFlexibleClientStatus(ride),
@@ -174,6 +202,11 @@ const mapRideDetails = async (ride: RideDocument) => {
     actual_duration_min: ride.actual_duration_min ?? null,
     finance_processed: Boolean(ride.finance_processed),
     completed_at: ride.completed_at ?? (ride.status === "COMPLETED" ? ride.updatedAt ?? null : null),
+    cancelled_at: ride.cancelled_at ?? null,
+    cancelled_by: ride.cancelled_by ?? null,
+    cancellation_reason: ride.cancellation_reason ?? null,
+    previous_status: ride.previous_status ?? null,
+    can_cancel: canCancel,
     emergency_alerted: Boolean(ride.emergency_alerted),
     emergency_at: ride.emergency_at ?? null,
     emergency_location: ride.emergency_location ?? null,
@@ -493,7 +526,11 @@ export const getRideStatus = async (customerIdInput: string | undefined, rideIdI
   return await mapRideDetails(current);
 };
 
-export const cancelRide = async (customerIdInput: string | undefined, rideIdInput?: string) => {
+export const cancelRide = async (
+  customerIdInput: string | undefined,
+  rideIdInput?: string,
+  reasonInput?: string
+) => {
   const customerId = ensureCustomerId(customerIdInput);
   const rideId = ensureRideId(rideIdInput);
 
@@ -504,19 +541,27 @@ export const cancelRide = async (customerIdInput: string | undefined, rideIdInpu
 
   ensureRideOwnership(ride, customerId);
 
-  const isCancellable =
-    ride.status === "PENDING_CONFIRMATION" || ride.status === "SEARCHING_DRIVER";
-  if (!isCancellable) {
-    throw new HttpError(400, "This ride cannot be cancelled in current status");
-  }
-
-  ride.status = "CANCELLED";
+  assertRideCancellable(ride);
+  applyCancellationFields(ride, "CUSTOMER", reasonInput);
   await ride.save();
+
+  if (ride.driver_id) {
+    await UserModel.updateOne(
+      { _id: ride.driver_id, role: "DRIVER" },
+      { $set: { driver_status: "ONLINE" } }
+    );
+  }
 
   await emitRideCancelledEvents(ride);
 
   return {
     message: "Ride cancelled successfully",
+    ride_id: ride.id,
+    status: "CANCELLED",
+    cancelled_by: ride.cancelled_by,
+    cancellation_reason: ride.cancellation_reason,
+    cancelled_at: ride.cancelled_at,
+    previous_status: ride.previous_status,
   };
 };
 

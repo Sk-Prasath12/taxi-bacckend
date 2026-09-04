@@ -139,6 +139,17 @@ export const locationUpdateSchema = z.object({
 export const rideActionSchema = z.object({
   body: z.object({
     ride_id: objectIdSchema,
+    reason: z.string().max(500).optional(),
+    cancellation_reason: z.string().max(500).optional(),
+  }),
+  params: z.object({}),
+  query: z.object({}),
+});
+
+export const startRideSchema = z.object({
+  body: z.object({
+    ride_id: objectIdSchema,
+    otp: z.coerce.number().int().min(100000).max(999999),
   }),
   params: z.object({}),
   query: z.object({}),

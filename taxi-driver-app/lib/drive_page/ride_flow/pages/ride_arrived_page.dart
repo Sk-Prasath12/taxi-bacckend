@@ -9,6 +9,7 @@ import '../ride_flow_routes.dart';
 import '../ride_flow_service.dart';
 import '../widgets/ride_flow_scaffold.dart';
 import '../widgets/ride_map_widget.dart';
+import '../widgets/driver_cancel_ride.dart';
 
 /// Page 2 — Arrived at pickup + pickup OTP on one screen.
 class RideArrivedPage extends StatefulWidget {
@@ -170,6 +171,14 @@ class _RideArrivedPageState extends State<RideArrivedPage> {
             counterText: '',
           ),
         ),
+        const SizedBox(height: 12),
+        if (ride['otp_verified'] != true) ...[
+          OutlinedButton.icon(
+            onPressed: _loading ? null : () => showDriverCancelRideDialog(context),
+            icon: const Icon(Icons.cancel_outlined, color: AppColors.danger),
+            label: const Text('Cancel Ride', style: TextStyle(color: AppColors.danger)),
+          ),
+        ],
       ],
     );
   }

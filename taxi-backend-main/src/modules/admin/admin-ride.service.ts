@@ -178,6 +178,8 @@ export const listAdminRideHistory = async (options: {
       duration_min: ride.duration_min ?? null,
       payment_mode: ride.payment_mode ?? "CASH",
       payment_status: ride.payment_status ?? "PENDING",
+      driver_earning: (ride as { driver_earning?: number }).driver_earning ?? null,
+      commission_amount: (ride as { commission_amount?: number }).commission_amount ?? null,
       vehicle_type: vehicle?.name ?? null,
       vehicle_type_code: vehicle?.code ?? null,
       customer: customer
@@ -200,10 +202,16 @@ export const listAdminRideHistory = async (options: {
       updated_at: ride.updatedAt ?? null,
       createdAt: ride.createdAt ?? null,
       updatedAt: ride.updatedAt ?? null,
+      accepted_at: (ride as { accepted_at?: Date }).accepted_at ?? null,
       trip_started_at: (ride as { trip_started_at?: Date }).trip_started_at ?? null,
       completed_at:
         (ride as { completed_at?: Date }).completed_at ??
         (ride.status === "COMPLETED" ? ride.updatedAt ?? null : null),
+      cancelled_at: (ride as { cancelled_at?: Date }).cancelled_at ?? null,
+      cancelled_by: (ride as { cancelled_by?: string }).cancelled_by ?? null,
+      cancellation_reason: (ride as { cancellation_reason?: string }).cancellation_reason ?? null,
+      previous_status: (ride as { previous_status?: string }).previous_status ?? null,
+      otp_verified: Boolean((ride as { otp_verified?: boolean }).otp_verified),
       finance_processed: Boolean((ride as { finance_processed?: boolean }).finance_processed),
       actual_distance_km: (ride as { actual_distance_km?: number }).actual_distance_km ?? null,
       actual_duration_min: (ride as { actual_duration_min?: number }).actual_duration_min ?? null,

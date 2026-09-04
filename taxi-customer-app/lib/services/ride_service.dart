@@ -87,27 +87,50 @@ class RideService {
 
       final data = jsonDecode(response.body);
       if (data is! Map<String, dynamic>) return null;
-      final rideId = (data['ride_id'] ?? data['id'] ?? '').toString();
-      if (rideId.isEmpty) return null;
 
-      final status = (data['status'] ?? '').toString().toUpperCase();
+      // Support flat payload or nested { ride } / { data: { ride } } / { data }.
+      Map<String, dynamic> rideMap;
+      if (data['ride_id'] != null || data['id'] != null) {
+        rideMap = data;
+      } else if (data['ride'] is Map) {
+        rideMap = Map<String, dynamic>.from(data['ride'] as Map);
+      } else if (data['data'] is Map) {
+        final nested = Map<String, dynamic>.from(data['data'] as Map);
+        if (nested['ride'] is Map) {
+          rideMap = Map<String, dynamic>.from(nested['ride'] as Map);
+        } else {
+          rideMap = nested;
+        }
+      } else {
+        // e.g. { message: "No active ride" }
+        await ActiveRideStore.clear();
+        return null;
+      }
+
+      final rideId = (rideMap['ride_id'] ?? rideMap['id'] ?? '').toString();
+      if (rideId.isEmpty) {
+        await ActiveRideStore.clear();
+        return null;
+      }
+
+      final status = (rideMap['status'] ?? '').toString().toUpperCase();
       if (status == 'CANCELLED' || status == 'CANCELLED_BY_CUSTOMER') {
         await ActiveRideStore.clear();
         return null;
       }
       if (status == 'COMPLETED') {
         final paymentStatus =
-            (data['payment_status'] ?? '').toString().toUpperCase();
+            (rideMap['payment_status'] ?? '').toString().toUpperCase();
         // Keep unpaid completed rides so payment screen can resume (cash or online).
         if (paymentStatus == 'PENDING' || paymentStatus.isEmpty) {
-          await cacheActiveRide(data);
-          return data;
+          await cacheActiveRide(rideMap);
+          return rideMap;
         }
         await ActiveRideStore.clear();
         return null;
       }
-      await cacheActiveRide(data);
-      return data;
+      await cacheActiveRide(rideMap);
+      return rideMap;
     } catch (e) {
       print('getActiveRide: $e');
       final cached = await ActiveRideStore.load();
@@ -157,40 +180,36 @@ class RideService {
   static const List<String> customerVehicleOrder = [
     'Bike',
     'Auto',
-    'Mini',
-    'Sedan',
-    'SUV',
-    'Premium Sedan',
-    'Premium SUV',
-    'XL',
-    'Electric',
-    'Accessible',
+    '5 Seater',
+    '7 Seater',
   ];
 
   static const List<String> customerVehicleCodes = [
     'BIKE',
     'AUTO',
-    'MINI',
-    'SEDAN',
-    'SUV',
-    'PREMIUM_SEDAN',
-    'PREMIUM_SUV',
-    'XL',
-    'ELECTRIC',
-    'ACCESSIBLE',
+    'FIVE_SEATER',
+    'SEVEN_SEATER',
   ];
 
   static const Map<String, String> _vehicleNameAliases = {
-    'Small 5 Seater Car': 'Mini',
-    '5 Seater': 'Mini',
-    'Big 7 Seater Car': 'Premium SUV',
-    '7 Seater': 'Premium SUV',
+    'Small 5 Seater Car': '5 Seater',
+    '5 Seater': '5 Seater',
+    'Big 7 Seater Car': '7 Seater',
+    '7 Seater': '7 Seater',
     'Motorbike': 'Bike',
     'Two Wheeler': 'Bike',
-    'Hatchback': 'Mini',
-    'Luxury': 'Premium Sedan',
-    'Van': 'XL',
-    'Hybrid': 'Electric',
+    'Hatchback': '5 Seater',
+    'Mini': '5 Seater',
+    'Sedan': '5 Seater',
+    'SUV': '7 Seater',
+    'Premium Sedan': '5 Seater',
+    'Premium SUV': '7 Seater',
+    'XL': '7 Seater',
+    'Electric': '5 Seater',
+    'Accessible': '5 Seater',
+    'Luxury': '5 Seater',
+    'Van': '7 Seater',
+    'Hybrid': '5 Seater',
   };
 
   static String _normalizeVehicleName(String name) =>
@@ -225,19 +244,19 @@ class RideService {
     return filtered;
   }
 
-  /// Reject stale caches from the old 4-type catalog.
+  /// Accept catalogs that include the four production vehicle types.
   static bool _isCompleteCatalog(List<VehicleTypeModel> list) {
-    if (list.length < customerVehicleCodes.length) return false;
+    if (list.isEmpty) return false;
     final codes = list
         .map((v) => v.code?.toUpperCase())
         .whereType<String>()
         .toSet();
     if (codes.isEmpty) {
-      // Older payloads without code — accept only if display names match catalog.
       final names = list.map((v) => _normalizeVehicleName(v.name)).toSet();
       return customerVehicleOrder.every(names.contains);
     }
-    return customerVehicleCodes.every(codes.contains);
+    return customerVehicleCodes.every(codes.contains) ||
+        list.length >= customerVehicleCodes.length;
   }
 
   /// Last-resort display names only — IDs must come from live API / cache.
@@ -275,13 +294,7 @@ class RideService {
             .toList();
       }
       var filtered = _filterCustomerVehicles(parsed);
-      if (filtered.isEmpty && parsed.isNotEmpty) {
-        // Server returned vehicles with unexpected names — still show them.
-        filtered = parsed
-            .where((v) => v.id.isNotEmpty)
-            .toList()
-          ..sort((a, b) => a.name.compareTo(b.name));
-      }
+      // Never show non-canonical types (only Bike / Auto / 5 Seater / 7 Seater).
       if (filtered.isEmpty) {
         throw Exception('No vehicle types configured on server');
       }
@@ -525,13 +538,25 @@ class RideService {
     }
   }
 
-  static Future<void> cancelRide(String rideId) async {
+  static Future<void> cancelRide(String rideId, {String? reason}) async {
     try {
       final token = await _token();
       final url =
           Uri.parse('${ApiConfig.baseUrl}/customers/rides/$rideId/cancel');
       _logUrl(url);
-      final response = await http.post(url, headers: _headers(token)).timeout(_apiTimeout);
+      final response = await http
+          .post(
+            url,
+            headers: {
+              ..._headers(token),
+              'Content-Type': 'application/json',
+            },
+            body: jsonEncode({
+              if (reason != null && reason.trim().isNotEmpty)
+                'reason': reason.trim(),
+            }),
+          )
+          .timeout(_apiTimeout);
       if (response.statusCode == 401) {
         await _handleUnauthorized();
         throw Exception('Access token expired - log in again');

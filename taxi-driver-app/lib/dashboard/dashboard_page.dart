@@ -40,6 +40,7 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
   StreamSubscription<Map<String, dynamic>>? _rideCancelSub;
   StreamSubscription<Map<String, dynamic>>? _rideTakenSub;
   StreamSubscription<Map<String, dynamic>>? _verificationSub;
+  StreamSubscription<Map<String, dynamic>>? _reconnectSub;
   StreamSubscription<void>? _approvalPollSub;
   Map<String, dynamic>? _pendingRide;
   FigmaNavTab _navTab = FigmaNavTab.drive;
@@ -87,6 +88,8 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       unawaited(DriverApprovalWatchService.instance.checkNow());
+      // Re-sync active ride from backend after app kill/minimize.
+      unawaited(_resumeActiveRideIfNeeded());
     }
   }
 
@@ -144,23 +147,31 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
 
   Future<void> _resumeActiveRideIfNeeded() async {
     if (RideFlowNavigator.isInFlow) return;
+    final token = AuthService().token;
+    // Prefer backend active ride as source of truth.
+    if (token != null) {
+      final active = await DriverApi.withToken(token).getActiveAssignedRide();
+      if (!mounted) return;
+      if (active != null) {
+        final status = (active['status'] ?? '').toString();
+        if (!ActiveRideStore.isTerminalStatus(status)) {
+          final rideId = (active['ride_id'] ?? active['id'] ?? '').toString();
+          final payload = {...active, 'id': rideId, 'ride_id': rideId};
+          await ActiveRideStore.save(payload);
+          if (!mounted) return;
+          await RideFlowNavigator.open(context, payload);
+          return;
+        }
+      }
+      await ActiveRideStore.clear();
+    }
+
     final stored = await ActiveRideStore.load();
     if (!mounted) return;
     if (stored != null && !ActiveRideStore.isTerminalStatus(stored['status']?.toString())) {
+      // Local only fallback when offline — still try to open.
       await RideFlowNavigator.open(context, stored);
-      return;
     }
-    final token = AuthService().token;
-    if (token == null) return;
-    final active = await DriverApi.withToken(token).getActiveAssignedRide();
-    if (!mounted || active == null) return;
-    final status = (active['status'] ?? '').toString();
-    if (ActiveRideStore.isTerminalStatus(status)) return;
-    final rideId = (active['ride_id'] ?? active['id'] ?? '').toString();
-    final payload = {...active, 'id': rideId, 'ride_id': rideId};
-    await ActiveRideStore.save(payload);
-    if (!mounted) return;
-    await RideFlowNavigator.open(context, payload);
   }
 
   void _showNotificationPopup({required String title, required String message}) {
@@ -205,6 +216,7 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
     _rideCancelSub?.cancel();
     _rideTakenSub?.cancel();
     _verificationSub?.cancel();
+    _reconnectSub?.cancel();
     DriverRideAlert.stop();
     if (_isOnDuty) {
       DriverRideListenerService.instance.stop();
@@ -283,10 +295,14 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
     _rideCancelSub?.cancel();
     _rideTakenSub?.cancel();
     _verificationSub?.cancel();
+    _reconnectSub?.cancel();
     _rideListenerSub = DriverRideListenerService.instance.incomingRideStream.listen(_onLiveRide);
     _rideCancelSub = DriverRideListenerService.instance.rideCancelledStream.listen(_onRideCancelled);
     _rideTakenSub = DriverSocketService().rideUpdateStream.listen(_onRideTakenByOther);
     _verificationSub = DriverSocketService().verificationStream.listen(_onVerificationUpdate);
+    _reconnectSub = DriverSocketService().reconnectStream.listen((_) {
+      unawaited(_resumeActiveRideIfNeeded());
+    });
     unawaited(widget.authService?.setWasOnDuty(true));
   }
 

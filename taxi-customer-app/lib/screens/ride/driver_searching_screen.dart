@@ -11,6 +11,7 @@ import '../../services/socket_service.dart';
 import '../../utils/device_gps.dart';
 import '../../utils/ride_locations.dart';
 import '../../theme/app_theme.dart';
+import 'widgets/customer_cancel_ride.dart';
 
 class DriverSearchingScreen extends StatefulWidget {
   const DriverSearchingScreen({super.key});
@@ -554,9 +555,37 @@ class _DriverSearchingScreenState extends State<DriverSearchingScreen> {
                               ? null
                               : () async {
                                   if (_cancelling) return;
+                                  final reasonController = TextEditingController();
+                                  final confirmed = await showDialog<bool>(
+                                    context: context,
+                                    builder: (ctx) => AlertDialog(
+                                      title: const Text('Cancel ride?'),
+                                      content: TextField(
+                                        controller: reasonController,
+                                        maxLines: 3,
+                                        decoration: const InputDecoration(
+                                          labelText: 'Reason (optional)',
+                                          border: OutlineInputBorder(),
+                                        ),
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () => Navigator.pop(ctx, false),
+                                          child: const Text('Keep ride'),
+                                        ),
+                                        TextButton(
+                                          onPressed: () => Navigator.pop(ctx, true),
+                                          child: const Text('Cancel ride'),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                  final reason = reasonController.text;
+                                  reasonController.dispose();
+                                  if (confirmed != true || !mounted) return;
                                   setState(() => _cancelling = true);
                                   try {
-                                    await RideService.cancelRide(rideId);
+                                    await RideService.cancelRide(rideId, reason: reason);
                                     await RideSessionCleanup.clearLocalOnly();
                                     if (!mounted) return;
                                     Navigator.pushNamedAndRemoveUntil(

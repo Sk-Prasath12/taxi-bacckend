@@ -38,6 +38,7 @@ export const acceptRideAtomically = async (rideId: string, driverId: string) => 
     },
     {
       $set: {
+        accepted_at: new Date(),
         status: "DRIVER_ASSIGNED",
         driver_id: driverId,
       },

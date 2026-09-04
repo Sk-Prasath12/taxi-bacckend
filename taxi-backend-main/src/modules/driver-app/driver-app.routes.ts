@@ -77,6 +77,7 @@ import {
   paymentRefundSchema,
   ratingSubmitSchema,
   rideActionSchema,
+  startRideSchema,
   rideIdParamSchema,
   rideRequestDetailsSchema,
   settingsUpdateSchema,
@@ -135,7 +136,7 @@ driverAppRouter.post("/rides/cancel", ...driverOnly, validate(rideActionSchema),
 
 // Ride lifecycle
 driverAppRouter.post("/rides/arrived", ...driverOnly, validate(rideActionSchema), rideArrivedController);
-driverAppRouter.post("/rides/start", ...driverOnly, validate(rideActionSchema), startRideController);
+driverAppRouter.post("/rides/start", ...driverOnly, validate(startRideSchema), startRideController);
 driverAppRouter.post("/rides/pickup-confirm", ...driverOnly, validate(rideActionSchema), pickupConfirmController);
 driverAppRouter.post("/rides/complete", ...driverOnly, validate(rideActionSchema), completeRideController);
 driverAppRouter.get("/rides/current", ...driverOnly, getCurrentRideController);

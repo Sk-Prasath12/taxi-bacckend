@@ -32,27 +32,21 @@ class _TaxiSelectionScreenState extends State<TaxiSelectionScreen> {
   static const Map<String, IconData> _iconByName = {
     'Bike': Icons.two_wheeler_rounded,
     'Auto': Icons.electric_rickshaw_rounded,
-    'Mini': Icons.directions_car_outlined,
+    '5 Seater': Icons.directions_car_filled_rounded,
+    '7 Seater': Icons.airport_shuttle_rounded,
+    'Mini': Icons.directions_car_filled_rounded,
     'Sedan': Icons.directions_car_filled_rounded,
     'SUV': Icons.airport_shuttle_rounded,
-    'Premium Sedan': Icons.directions_car_rounded,
-    'Premium SUV': Icons.local_taxi_rounded,
-    'XL': Icons.airport_shuttle_outlined,
-    'Electric': Icons.electric_car_rounded,
-    'Accessible': Icons.accessible_rounded,
   };
 
   static const Map<String, IconData> _iconByCode = {
     'BIKE': Icons.two_wheeler_rounded,
     'AUTO': Icons.electric_rickshaw_rounded,
-    'MINI': Icons.directions_car_outlined,
+    'FIVE_SEATER': Icons.directions_car_filled_rounded,
+    'SEVEN_SEATER': Icons.airport_shuttle_rounded,
+    'MINI': Icons.directions_car_filled_rounded,
     'SEDAN': Icons.directions_car_filled_rounded,
     'SUV': Icons.airport_shuttle_rounded,
-    'PREMIUM_SEDAN': Icons.directions_car_rounded,
-    'PREMIUM_SUV': Icons.local_taxi_rounded,
-    'XL': Icons.airport_shuttle_outlined,
-    'ELECTRIC': Icons.electric_car_rounded,
-    'ACCESSIBLE': Icons.accessible_rounded,
   };
 
   IconData _iconFor(VehicleTypeModel v) {
@@ -150,19 +144,22 @@ class _TaxiSelectionScreenState extends State<TaxiSelectionScreen> {
       });
     }
     try {
-      // Always prefer live catalog so Bike…Accessible stay in sync with driver app.
+      // Always prefer live catalog so Bike / Auto / 5 Seater / 7 Seater stay in sync.
       await VehicleTypesCache.clear();
       final list = await RideService.getVehicleTypes(allowCacheFallback: true);
       if (!mounted) return;
       setState(() {
         _vehicles = list;
-        // Prefer Sedan as default when available; otherwise first catalog item.
-        final sedan = list.where((v) {
+        // Prefer 5 Seater as default when available; otherwise first catalog item.
+        final preferred = list.where((v) {
           final code = v.code?.toUpperCase();
-          return code == 'SEDAN' || v.name == 'Sedan';
+          return code == 'FIVE_SEATER' ||
+              code == 'SEDAN' ||
+              v.name == '5 Seater' ||
+              v.name == 'Sedan';
         });
-        selectedTypeId = sedan.isNotEmpty
-            ? sedan.first.id
+        selectedTypeId = preferred.isNotEmpty
+            ? preferred.first.id
             : (list.isNotEmpty ? list.first.id : null);
         _usingCachedVehicles = RideService.lastVehicleLoadUsedCache;
         _loadError = RideService.lastVehicleLoadUsedCache
@@ -318,7 +315,7 @@ class _TaxiSelectionScreenState extends State<TaxiSelectionScreen> {
                         Text(
                           _vehicles.isEmpty
                               ? 'Loading vehicle options…'
-                              : '${_vehicles.length} vehicle types • Bike to Accessible',
+                              : '${_vehicles.length} vehicle types • Bike, Auto, 5 Seater, 7 Seater',
                           style: const TextStyle(
                             color: AppTheme.inkMuted,
                             fontSize: 13,

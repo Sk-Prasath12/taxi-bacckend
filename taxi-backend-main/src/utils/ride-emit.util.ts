@@ -72,6 +72,8 @@ export const buildRideEmitPayload = async (ride: RideDocument) => {
     duration_min: extended.actual_duration_min ?? ride.duration_min ?? 0,
     actual_duration_min: extended.actual_duration_min ?? null,
     fare: ride.fare,
+    driver_earning: ride.driver_earning ?? null,
+    commission_amount: ride.commission_amount ?? null,
     currency: "INR",
     status: ride.status,
     client_status: toFlexibleClientStatus(ride),
@@ -82,9 +84,20 @@ export const buildRideEmitPayload = async (ride: RideDocument) => {
     drop_otp: typeof extended.drop_otp === "number" ? extended.drop_otp : null,
     drop_otp_verified: Boolean(extended.drop_otp_verified),
     drop_reached: Boolean(extended.drop_reached),
+    accepted_at: ride.accepted_at ?? null,
     trip_started_at: extended.trip_started_at ?? null,
     finance_processed: Boolean(ride.finance_processed),
     completed_at: ride.completed_at ?? (ride.status === "COMPLETED" ? ride.updatedAt ?? null : null),
+    cancelled_at: ride.cancelled_at ?? null,
+    cancelled_by: ride.cancelled_by ?? null,
+    cancellation_reason: ride.cancellation_reason ?? null,
+    previous_status: ride.previous_status ?? null,
+    can_cancel:
+      !ride.otp_verified &&
+      !ride.trip_started_at &&
+      ["PENDING_CONFIRMATION", "SEARCHING_DRIVER", "DRIVER_ASSIGNED", "ARRIVED_AT_PICKUP"].includes(
+        ride.status
+      ),
     emergency_alerted: Boolean(ride.emergency_alerted),
     emergency_at: ride.emergency_at ?? null,
     emergency_location: ride.emergency_location ?? null,

@@ -39,11 +39,19 @@ export type RideEntity = {
   actual_distance_km?: number;
   actual_duration_min?: number;
   fare: number;
+  /** Driver net earning after commission (persisted on complete). */
+  driver_earning?: number;
+  commission_amount?: number;
   /** Defaults applied by schema; may be absent on legacy documents */
   payment_mode?: PaymentMode;
   payment_status?: PaymentStatus;
   finance_processed?: boolean;
+  accepted_at?: Date;
   completed_at?: Date;
+  cancelled_at?: Date;
+  cancelled_by?: "CUSTOMER" | "DRIVER" | "ADMIN" | "SYSTEM";
+  cancellation_reason?: string;
+  previous_status?: string;
   emergency_alerted?: boolean;
   emergency_at?: Date;
   emergency_location?: { lat: number; lng: number; address?: string };
@@ -89,10 +97,21 @@ const rideSchema = new Schema<RideEntity>(
     actual_distance_km: { type: Number, default: undefined, min: 0 },
     actual_duration_min: { type: Number, default: undefined, min: 0 },
     fare: { type: Number, required: true, min: 0, default: 0 },
+    driver_earning: { type: Number, default: undefined, min: 0 },
+    commission_amount: { type: Number, default: undefined, min: 0 },
     payment_mode: { type: String, enum: PAYMENT_MODES, default: "CASH" },
     payment_status: { type: String, enum: PAYMENT_STATUSES, default: "PENDING" },
     finance_processed: { type: Boolean, default: false },
+    accepted_at: { type: Date, default: undefined },
     completed_at: { type: Date, default: undefined },
+    cancelled_at: { type: Date, default: undefined },
+    cancelled_by: {
+      type: String,
+      enum: ["CUSTOMER", "DRIVER", "ADMIN", "SYSTEM"],
+      default: undefined,
+    },
+    cancellation_reason: { type: String, default: undefined },
+    previous_status: { type: String, default: undefined },
     emergency_alerted: { type: Boolean, default: false },
     emergency_at: { type: Date, default: undefined },
     emergency_location: {
