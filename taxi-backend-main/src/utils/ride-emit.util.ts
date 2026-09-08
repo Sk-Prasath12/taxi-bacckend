@@ -1,24 +1,47 @@
 import { RideDocument } from "../modules/customer/ride/ride.model";
+import { DriverProfileModel } from "../modules/driver-profile/driver-profile.model";
 import { UserModel } from "../modules/users/users.model";
+import { VehicleTypeModel } from "../modules/vehicle-type/vehicle-type.model";
+import { normalizeVehicleDisplayName } from "../constants/vehicle-types.constants";
 
-const getDriverDetails = async (driverId?: string | null) => {
+export const getDriverContactDetails = async (driverId?: string | null) => {
   if (!driverId) return null;
-  const driver = await UserModel.findOne({ _id: driverId, role: "DRIVER" });
+  const driver = await UserModel.findOne({ _id: driverId, role: "DRIVER" }).lean();
   if (!driver) return null;
+
+  const profile = await DriverProfileModel.findOne({ user_id: driver._id }).lean();
+  let vehicleTypeName: string | null = null;
+  if (profile?.vehicle_type_id) {
+    const vt = await VehicleTypeModel.findById(profile.vehicle_type_id).lean();
+    if (vt?.name) vehicleTypeName = normalizeVehicleDisplayName(vt.name);
+  }
+
+  const phone = (driver.phone ?? profile?.phone ?? null)?.toString().trim() || null;
+
   return {
-    id: driver.id,
+    id: String(driver._id),
     name: driver.name,
-    phone: driver.phone ?? null,
+    phone,
     status: driver.driver_status ?? "OFFLINE",
+    vehicle_type: vehicleTypeName,
+    vehicle_number: profile?.vehicle_reg_number ?? null,
+    vehicle_model: profile?.vehicle_model ?? null,
+    vehicle_color: profile?.vehicle_color ?? null,
+    vehicle: {
+      type: vehicleTypeName,
+      number: profile?.vehicle_reg_number ?? null,
+      model: profile?.vehicle_model ?? null,
+      color: profile?.vehicle_color ?? null,
+    },
   };
 };
 
-const getCustomerDetails = async (customerId?: string | null) => {
+export const getCustomerContactDetails = async (customerId?: string | null) => {
   if (!customerId) return null;
-  const customer = await UserModel.findOne({ _id: customerId, role: "CUSTOMER" });
+  const customer = await UserModel.findOne({ _id: customerId, role: "CUSTOMER" }).lean();
   if (!customer) return null;
   return {
-    id: customer.id,
+    id: String(customer._id),
     name: customer.name,
     phone: customer.phone ?? null,
     email: customer.email ?? null,
@@ -45,8 +68,8 @@ export const toFlexibleClientStatus = (ride: RideDocument): string => {
 };
 
 export const buildRideEmitPayload = async (ride: RideDocument) => {
-  const driver = await getDriverDetails(ride.driver_id ? String(ride.driver_id) : null);
-  const customer = await getCustomerDetails(String(ride.customer_id));
+  const driver = await getDriverContactDetails(ride.driver_id ? String(ride.driver_id) : null);
+  const customer = await getCustomerContactDetails(String(ride.customer_id));
   const extended = ride as RideDocument & {
     drop_otp?: number;
     drop_otp_verified?: boolean;
@@ -62,6 +85,7 @@ export const buildRideEmitPayload = async (ride: RideDocument) => {
     id: ride.id,
     customer_id: String(ride.customer_id),
     vehicle_type_id: ride.vehicle_type_id ? String(ride.vehicle_type_id) : null,
+    vehicle_type: driver?.vehicle_type ?? null,
     driver_id: ride.driver_id ? String(ride.driver_id) : null,
     pickup: ride.pickup,
     drop: ride.drop,
@@ -103,6 +127,10 @@ export const buildRideEmitPayload = async (ride: RideDocument) => {
     emergency_location: ride.emergency_location ?? null,
     driver,
     customer,
+    driver_name: driver?.name ?? null,
+    driver_phone: driver?.phone ?? null,
+    customer_name: customer?.name ?? null,
+    customer_phone: customer?.phone ?? null,
     createdAt: ride.createdAt,
     updatedAt: ride.updatedAt,
     created_at: ride.createdAt ?? null,

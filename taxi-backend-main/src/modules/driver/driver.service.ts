@@ -12,10 +12,26 @@ import { UserModel } from "../users/users.model";
 import { WalletModel } from "../finance/wallet.model";
 import { DriverDueModel } from "../finance/driver-due.model";
 import { WalletTransactionModel } from "../finance/wallet-transaction.model";
+import { ensureDriverWalletSettled } from "../finance/finance.service";
 import { RideModel } from "../customer/ride/ride.model";
 import { DriverOtpModel } from "./driver.otp.model";
 import { VehicleTypeModel } from "../vehicle-type/vehicle-type.model";
 import { calculateCommission } from "../common/commission.service";
+
+/** Dart `DateTime.now().timeZoneOffset.inMinutes` (e.g. IST = +330). */
+const startOfLocalDayUtc = (tzOffsetMinutes: number, atMs = Date.now()): Date => {
+  const localMs = atMs + tzOffsetMinutes * 60_000;
+  const local = new Date(localMs);
+  const y = local.getUTCFullYear();
+  const m = local.getUTCMonth();
+  const d = local.getUTCDate();
+  return new Date(Date.UTC(y, m, d) - tzOffsetMinutes * 60_000);
+};
+
+const localDateKey = (date: Date, tzOffsetMinutes: number): string => {
+  const local = new Date(date.getTime() + tzOffsetMinutes * 60_000);
+  return local.toISOString().slice(0, 10);
+};
 
 const OTP_EXPIRY_MINUTES = 10;
 const OTP_PURPOSE_REGISTER = "REGISTER" as const;
@@ -570,6 +586,9 @@ export const updateDriverStatus = async (
 
 export const getDriverWallet = async (userId: string | undefined) => {
   const driver = await findDriverByUserId(userId);
+  // Settle any completed paid rides that never hit the wallet (and repair old CASH credits).
+  await ensureDriverWalletSettled(driver._id);
+
   const [wallet, due, txns] = await Promise.all([
     WalletModel.findOne({ user_id: driver._id }).lean(),
     DriverDueModel.findOne({ driver_id: driver._id }).lean(),
@@ -678,15 +697,20 @@ export const getDriverTotalEarnings = async (userId: string | undefined) => {
 export const getDriverEarningsSummary = async (
   userId: string | undefined,
   periodInput?: string,
-  _tzOffsetMinutes?: number
+  tzOffsetMinutes?: number
 ) => {
   const driver = await findDriverByUserId(userId);
+  await ensureDriverWalletSettled(driver._id);
+
   const period = (periodInput ?? "week").toLowerCase();
+  const tz =
+    typeof tzOffsetMinutes === "number" && Number.isFinite(tzOffsetMinutes)
+      ? Math.trunc(tzOffsetMinutes)
+      : 330; // default India if client omits offset
   const now = Date.now();
   let since = new Date(now - 7 * 24 * 60 * 60 * 1000);
   if (period === "today") {
-    since = new Date();
-    since.setHours(0, 0, 0, 0);
+    since = startOfLocalDayUtc(tz, now);
   } else if (period === "month") {
     since = new Date(now - 30 * 24 * 60 * 60 * 1000);
   } else if (period === "year") {
@@ -699,6 +723,7 @@ export const getDriverEarningsSummary = async (
     RideModel.find({
       driver_id: driver._id,
       status: "COMPLETED",
+      payment_status: "SUCCESS",
       $or: [
         { completed_at: { $gte: since } },
         { completed_at: { $exists: false }, updatedAt: { $gte: since } },
@@ -762,20 +787,40 @@ export const getDriverEarningsSummary = async (
     };
   });
 
-  // Daily breakdown for charts
-  const dailyMap = new Map<string, { earnings: number; rides: number }>();
+  // Daily breakdown for charts (local calendar day via tz_offset)
+  const dailyMap = new Map<
+    string,
+    { earnings: number; fare: number; rides: number; cash: number; digital: number }
+  >();
   for (const ride of ridesList) {
     const d = ride.completed_at ? new Date(ride.completed_at) : null;
     if (!d || Number.isNaN(d.getTime())) continue;
-    const key = d.toISOString().slice(0, 10);
-    const cur = dailyMap.get(key) ?? { earnings: 0, rides: 0 };
+    const key = localDateKey(d, tz);
+    const cur = dailyMap.get(key) ?? {
+      earnings: 0,
+      fare: 0,
+      rides: 0,
+      cash: 0,
+      digital: 0,
+    };
     cur.earnings += ride.driver_earning;
+    cur.fare += ride.fare;
     cur.rides += 1;
+    if ((ride.payment_mode ?? "CASH") === "CASH") cur.cash += ride.fare;
+    else cur.digital += ride.fare;
     dailyMap.set(key, cur);
   }
   const daily_breakdown = [...dailyMap.entries()]
     .sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([date, v]) => ({ date, earnings: v.earnings, rides: v.rides }));
+    .map(([date, v]) => ({
+      date,
+      earnings: v.earnings,
+      net: v.earnings,
+      total: v.fare,
+      rides: v.rides,
+      cash: v.cash,
+      digital: v.digital,
+    }));
 
   return {
     period,
@@ -793,8 +838,10 @@ export const getDriverEarningsSummary = async (
     period_trips: ridesList.length,
     wallet_balance: wallet?.balance ?? 0,
     online_earnings: wallet?.total_earned ?? 0,
+    total_earned: wallet?.total_earned ?? 0,
     cash_due: due?.due_amount ?? 0,
     total_completed_trips: totalTrips,
+    tz_offset: tz,
     daily_breakdown,
     rides_list: ridesList,
   };

@@ -701,7 +701,8 @@ class DriverApi {
           'duration': item['duration'] ?? item['eta'] ?? '15 min',
           'fare': (item['fare'] as num?)?.toDouble() ?? (item['price'] as num?)?.toDouble() ?? 0.0,
           'driverEarnings': (item['driverEarnings'] as num?)?.toDouble() ??
-              (item['driver_earnings'] as num?)?.toDouble(),
+              (item['driver_earnings'] as num?)?.toDouble() ??
+              (item['driver_earning'] as num?)?.toDouble(),
           'paymentMethod': item['paymentMethod'] ?? item['payment_method'] ?? item['payment_mode'],
           'completedAt': item['completedAt'] ??
               item['completed_at'] ??

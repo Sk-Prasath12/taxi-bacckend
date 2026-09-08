@@ -54,6 +54,7 @@ type DriverLiveLocation = {
 
 type DriverLocationBroadcastPayload = {
   ride_id: string;
+  rideId: string;
   lat: number;
   lng: number;
   bearing: number;
@@ -300,6 +301,7 @@ const buildDriverLocationPayload = async (
 
   return {
     ride_id: liveLocation.rideId,
+    rideId: liveLocation.rideId,
     lat: liveLocation.lat,
     lng: liveLocation.lng,
     bearing: liveLocation.bearing,
@@ -551,7 +553,8 @@ const handleDriverLocationEvent = (socket: Socket) => {
 
     for (const room of rideRooms) {
       io.to(room).emit("driver_location_update", {
-        rideId,
+        ride_id: String(ride._id),
+        rideId: String(ride._id),
         lat: latitude,
         lng: longitude,
         bearing,
@@ -564,7 +567,8 @@ const handleDriverLocationEvent = (socket: Socket) => {
       }
     }
     io.to(`customer_${String(ride.customer_id)}`).emit("driver_location_update", {
-      rideId,
+      ride_id: String(ride._id),
+      rideId: String(ride._id),
       lat: latitude,
       lng: longitude,
       bearing,

@@ -10,7 +10,7 @@ import { joinRideRoomForUser } from "../../../socket/socket";
 import { dispatchNewRideToNearbyDrivers, emitToRoom } from "../../../socket/socket-emit.service";
 import { validateRideLocations } from "../../operational-zone/operational-zone.service";
 import { emitCustomerAndRide, emitAdminRideUpdate } from "../../../utils/ride-socket-events.util";
-import { toFlexibleClientStatus } from "../../../utils/ride-emit.util";
+import { toFlexibleClientStatus, getDriverContactDetails, getCustomerContactDetails } from "../../../utils/ride-emit.util";
 import { getNearbyDriverRadiusKm } from "../../../utils/nearby-drivers.util";
 import { expireSearchingRideIfNeeded } from "../../../utils/ride-search-timeout.util";
 import {
@@ -169,7 +169,8 @@ const mapRideSummary = (ride: RideDocument) => ({
 });
 
 const mapRideDetails = async (ride: RideDocument) => {
-  const driver = await getDriverDetails(ride.driver_id ? String(ride.driver_id) : null);
+  const driver = await getDriverContactDetails(ride.driver_id ? String(ride.driver_id) : null);
+  const customer = await getCustomerContactDetails(String(ride.customer_id));
   const canCancel =
     CANCELLABLE_STATUSES.includes(ride.status) &&
     !ride.otp_verified &&
@@ -179,6 +180,7 @@ const mapRideDetails = async (ride: RideDocument) => {
     ride_id: ride.id,
     customer_id: String(ride.customer_id),
     vehicle_type_id: ride.vehicle_type_id ? String(ride.vehicle_type_id) : null,
+    vehicle_type: driver?.vehicle_type ?? null,
     driver_id: ride.driver_id ? String(ride.driver_id) : null,
     pickup: ride.pickup,
     drop: ride.drop,
@@ -211,6 +213,11 @@ const mapRideDetails = async (ride: RideDocument) => {
     emergency_at: ride.emergency_at ?? null,
     emergency_location: ride.emergency_location ?? null,
     driver,
+    customer,
+    driver_name: driver?.name ?? null,
+    driver_phone: driver?.phone ?? null,
+    customer_name: customer?.name ?? null,
+    customer_phone: customer?.phone ?? null,
     createdAt: ride.createdAt,
     updatedAt: ride.updatedAt,
   };
@@ -218,24 +225,6 @@ const mapRideDetails = async (ride: RideDocument) => {
 
 const generateRideOtp = (): number =>
   Math.floor(Math.random() * (OTP_MAX - OTP_MIN + 1)) + OTP_MIN;
-
-const getDriverDetails = async (driverId?: string | null) => {
-  if (!driverId) {
-    return null;
-  }
-
-  const driver = await UserModel.findOne({ _id: driverId, role: "DRIVER" });
-  if (!driver) {
-    return null;
-  }
-
-  return {
-    id: driver.id,
-    name: driver.name,
-    phone: driver.phone ?? null,
-    status: driver.driver_status ?? "OFFLINE",
-  };
-};
 
 type OsrmRouteResponse = {
   routes?: Array<{
@@ -689,7 +678,7 @@ export const getCustomerRideInvoice = async (
   }
   ensureRideOwnership(ride, customerId);
 
-  const driver = await getDriverDetails(ride.driver_id ? String(ride.driver_id) : null);
+  const driver = await getDriverContactDetails(ride.driver_id ? String(ride.driver_id) : null);
 
   return {
     ride_id: ride.id,
