@@ -3,9 +3,10 @@ import 'dart:math';
 
 import 'package:hive_flutter/hive_flutter.dart';
 
-/// Secure local driver session (Hive). Cleared only on logout.
+/// Local driver session (Hive). Namespaced box — independent of customer app.
 class DriverSessionStore {
-  static const _boxName = 'driver_session_box';
+  static const _boxName = 'driver_session_v1';
+  static const _legacyBoxName = 'driver_session_box';
 
   static const keyToken = 'access_token';
   static const keyRefreshToken = 'refresh_token';
@@ -20,7 +21,18 @@ class DriverSessionStore {
   static const keyDeviceId = 'device_id';
   static const keyProfileJson = 'profile_json';
 
-  static Future<Box<dynamic>> _box() => Hive.openBox(_boxName);
+  static Future<Box<dynamic>> _box() async {
+    final box = await Hive.openBox(_boxName);
+    if (box.isEmpty && await Hive.boxExists(_legacyBoxName)) {
+      try {
+        final legacy = await Hive.openBox(_legacyBoxName);
+        for (final key in legacy.keys) {
+          await box.put(key, legacy.get(key));
+        }
+      } catch (_) {}
+    }
+    return box;
+  }
 
   static Future<String> deviceId() async {
     final box = await _box();

@@ -9,6 +9,8 @@ const userSchema = new Schema<UserEntity>(
     email: { type: String, required: true, lowercase: true, trim: true },
     phone: { type: String, required: false, trim: true },
     fcm_token: { type: String, required: false, trim: true },
+    /** Driver-app push token — kept separate so customer & driver apps on one device do not overwrite each other. */
+    driver_fcm_token: { type: String, required: false, trim: true },
     password_hash: { type: String, required: true },
     role: {
       type: String,

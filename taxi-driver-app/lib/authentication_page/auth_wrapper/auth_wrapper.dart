@@ -5,11 +5,12 @@ import 'package:taxiapp/authentication_page/auth_service.dart';
 import 'package:taxiapp/authentication_page/driver_setup_page.dart';
 import 'package:taxiapp/authentication_page/log_in_page/login_page.dart';
 import 'package:taxiapp/core/app_colors.dart';
-import 'package:taxiapp/customer/customer_auth_service.dart';
-import 'package:taxiapp/customer/customer_home_page.dart';
 import 'package:taxiapp/services/driver_approval_watch_service.dart';
 import 'package:taxiapp/dashboard/dashboard_page.dart';
 
+/// Driver APK only — never routes to embedded customer UI.
+/// Customer rides use the separate customer app so both can stay logged in
+/// on the same device.
 class AuthWrapper extends StatefulWidget {
   final AuthService authService;
 
@@ -23,7 +24,6 @@ class AuthWrapper extends StatefulWidget {
 }
 
 class _AuthWrapperState extends State<AuthWrapper> {
-  final _customerAuth = CustomerAuthService();
   bool _bootstrapping = false;
   bool _bootstrapDone = false;
   bool _wasAuthenticated = false;
@@ -32,7 +32,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
   void initState() {
     super.initState();
     widget.authService.addListener(_onAuthChange);
-    _customerAuth.addListener(_onAuthChange);
     _wasAuthenticated = widget.authService.isAuthenticated;
     if (widget.authService.isAuthenticated) {
       unawaited(_refreshSessionInBackground());
@@ -45,7 +44,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
     if (_bootstrapping) return;
     setState(() {
       _bootstrapping = true;
-      _bootstrapDone = false;
+      _bootstrapDone = _bootstrapDone || widget.authService.hasVehicleSetup;
     });
     try {
       await widget.authService.bootstrapSession();
@@ -68,7 +67,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   void dispose() {
     widget.authService.removeListener(_onAuthChange);
-    _customerAuth.removeListener(_onAuthChange);
     super.dispose();
   }
 
@@ -84,7 +82,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
       return;
     }
 
-    // Fresh login / register: restore profile before routing.
     if (!_wasAuthenticated && nowAuth) {
       _wasAuthenticated = true;
       unawaited(_refreshSessionInBackground());
@@ -99,21 +96,11 @@ class _AuthWrapperState extends State<AuthWrapper> {
   bool get _shouldShowLoading {
     final auth = widget.authService;
     if (!auth.isAuthenticated) return false;
-    if (auth.sessionHydrating) return true;
-    if (!_bootstrapDone || _bootstrapping) return true;
-    return false;
+    if (_bootstrapDone || auth.hasVehicleSetup) return false;
+    return _bootstrapping || auth.sessionHydrating;
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final auth = widget.authService;
-    if (!auth.isAuthenticated) {
-      if (_customerAuth.isLoggedIn) {
-        return const CustomerHomePage();
-      }
-      return LoginPage(authService: auth);
-    }
-
+  Widget _driverHome(AuthService auth) {
     if (_shouldShowLoading) {
       return const Scaffold(
         backgroundColor: AppColors.scaffoldDark,
@@ -122,12 +109,18 @@ class _AuthWrapperState extends State<AuthWrapper> {
         ),
       );
     }
-
-    // Existing drivers with saved vehicle → Dashboard (Go Online lives there).
-    // New drivers / missing vehicle → onboarding vehicle form only.
     if (auth.needsSetupWizard) {
       return DriverSetupPage(authService: auth);
     }
     return DashboardPage(authService: auth);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = widget.authService;
+    if (auth.isAuthenticated) {
+      return _driverHome(auth);
+    }
+    return LoginPage(authService: auth);
   }
 }

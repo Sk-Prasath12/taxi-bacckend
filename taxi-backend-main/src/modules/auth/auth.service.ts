@@ -15,12 +15,15 @@ export const loginUser = async (email: string, password: string) => {
     throw new HttpError(401, "Invalid credentials");
   }
 
+  // Stateless JWT — login does NOT revoke other apps/devices/sessions.
+  // Driver and customer apps on the same phone can stay logged in together.
   const accessToken = generateAccessToken(user.id, user.role);
   const refreshToken = generateRefreshToken(user.id, user.role);
 
   return {
     accessToken,
     refreshToken,
+    sessions_independent: true,
     user: {
       id: user.id,
       name: user.name,

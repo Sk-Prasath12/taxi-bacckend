@@ -346,6 +346,7 @@ async function emitDriverVerificationEvent(
 async function notifyDriverVerificationApproved(driver: {
   _id: Types.ObjectId;
   fcm_token?: string;
+  driver_fcm_token?: string;
 }): Promise<void> {
   const driverId = String(driver._id);
   const message =
@@ -357,9 +358,10 @@ async function notifyDriverVerificationApproved(driver: {
     is_driver_verified: true,
   });
 
-  if (driver.fcm_token?.trim()) {
+  const pushToken = driver.driver_fcm_token?.trim() || driver.fcm_token?.trim();
+  if (pushToken) {
     await sendPushNotification({
-      token: driver.fcm_token.trim(),
+      token: pushToken,
       title: "Driver verified",
       body: message,
       data: {

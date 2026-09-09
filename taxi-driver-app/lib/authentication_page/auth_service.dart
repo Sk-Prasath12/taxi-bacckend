@@ -142,8 +142,23 @@ class AuthService extends ChangeNotifier {
       totalOrders == 0 ? 0.0 : (acceptedOrders / totalOrders) * 100;
 
   Future<void> init() async {
-    _authBox = await Hive.openBox('authbox');
-    _ordersBox = await Hive.openBox('ordersbox');
+    // Namespaced Hive box so this APK never shares keys with the customer app.
+    _authBox = await Hive.openBox('driver_auth_v1');
+    _ordersBox = await Hive.openBox('driver_orders_v1');
+    try {
+      final legacyAuth = await Hive.openBox('authbox');
+      if (_authBox!.isEmpty && legacyAuth.isNotEmpty) {
+        for (final key in legacyAuth.keys) {
+          await _authBox!.put(key, legacyAuth.get(key));
+        }
+      }
+      final legacyOrders = await Hive.openBox('ordersbox');
+      if (_ordersBox!.isEmpty && legacyOrders.isNotEmpty) {
+        for (final key in legacyOrders.keys) {
+          await _ordersBox!.put(key, legacyOrders.get(key));
+        }
+      }
+    } catch (_) {}
 
     final session = await DriverSessionStore.loadSession();
     if (session != null) {
@@ -215,17 +230,18 @@ class AuthService extends ChangeNotifier {
               final retryResponse =
                   await _apiClient.getResult('${ApiConstants.driverBase}/profile');
               if (retryResponse.statusCode == 401 || retryResponse.statusCode == 403) {
-                await logout();
-                return false;
-              }
-              if (retryResponse.data is Map<String, dynamic>) {
+                if (isJwtExpired(token)) {
+                  await logout();
+                  return false;
+                }
+              } else if (retryResponse.data is Map<String, dynamic>) {
                 await _applyProfileResponse(retryResponse.data as Map<String, dynamic>);
               }
-            } else {
+            } else if (isJwtExpired(token)) {
               await logout();
               return false;
             }
-          } else {
+          } else if (isJwtExpired(token)) {
             await logout();
             return false;
           }

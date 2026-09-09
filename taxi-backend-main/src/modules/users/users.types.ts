@@ -40,6 +40,8 @@ export type UserEntity = {
   email: string;
   phone?: string;
   fcm_token?: string;
+  /** Push token for the driver APK (independent of customer fcm_token). */
+  driver_fcm_token?: string;
   password_hash: string;
   role: UserRole;
   driver_status?: DriverStatus;

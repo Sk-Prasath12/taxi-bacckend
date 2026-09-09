@@ -396,6 +396,8 @@ export const loginDriver = async (email: string, password: string) => {
   return {
     success: true,
     message: "Login successful",
+    // Stateless JWT — does not log out the customer app on the same device.
+    sessions_independent: true,
     token: accessToken,
     accessToken,
     refreshToken,

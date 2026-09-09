@@ -43,22 +43,16 @@ class CustomerSessionStore {
     final prefs = await SharedPreferences.getInstance();
     final now = DateTime.now().toIso8601String();
     await prefs.setString(keyToken, accessToken);
-    await prefs.setString('token', accessToken);
-    await prefs.setString('access_token', accessToken);
-    await prefs.setString('auth_token', accessToken);
     if (refreshToken != null && refreshToken.isNotEmpty) {
       await prefs.setString(keyRefreshToken, refreshToken);
-      await prefs.setString('refresh_token', refreshToken);
     }
     if (customerId != null) await prefs.setString(keyCustomerId, customerId);
     if (email != null) {
       await prefs.setString(keyEmail, email);
-      await prefs.setString('user_email', email);
       await prefs.setString(keyLastLoginEmail, email);
     }
     if (name != null) {
       await prefs.setString(keyName, name);
-      await prefs.setString('user_name', name);
     }
     if (phone != null) await prefs.setString(keyPhone, phone);
     await prefs.setBool(keyIsLoggedIn, true);
@@ -161,6 +155,7 @@ class CustomerSessionStore {
     await prefs.remove(keyLoginAt);
     await prefs.remove(keyLastActiveAt);
     await prefs.remove(keyProfileJson);
+    // Also clear legacy unprefixed keys so a driver/web session cannot reuse them.
     await prefs.remove('auth_token');
     await prefs.remove('token');
     await prefs.remove('access_token');

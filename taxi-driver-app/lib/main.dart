@@ -5,7 +5,6 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:taxiapp/authentication_page/auth_service.dart';
 import 'package:taxiapp/authentication_page/auth_wrapper/auth_wrapper.dart';
 import 'package:taxiapp/core/app_colors.dart';
-import 'package:taxiapp/customer/customer_auth_service.dart';
 import 'package:taxiapp/config/env_config.dart';
 import 'package:taxiapp/config/production_config_guard.dart';
 import 'package:taxiapp/theme.dart';
@@ -28,7 +27,6 @@ Future<void> main() async {
 
     await Hive.initFlutter();
     await AuthService().init();
-    await CustomerAuthService().init();
   } catch (e, st) {
     bootError = e.toString();
     debugPrint('App bootstrap failed: $e\n$st');

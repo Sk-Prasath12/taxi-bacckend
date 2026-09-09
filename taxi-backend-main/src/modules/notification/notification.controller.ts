@@ -19,15 +19,17 @@ export const saveNotificationTokenController = async (
       throw new HttpError(400, "token is required");
     }
 
-    const user = await UserModel.findByIdAndUpdate(
-      userId,
-      { fcm_token: token },
-      { new: true }
-    );
+    const user = await UserModel.findById(userId);
     if (!user) {
       throw new HttpError(404, "User not found");
     }
-    console.log("✅ FCM token saved:", userId);
+
+    const role = (req.authUser?.role ?? user.role ?? "CUSTOMER").toUpperCase();
+    const update =
+      role === "DRIVER" ? { driver_fcm_token: token } : { fcm_token: token };
+
+    await UserModel.findByIdAndUpdate(userId, update, { new: true });
+    console.log("✅ FCM token saved:", userId, role);
 
     return res.status(200).json(successResponse("FCM token saved"));
   } catch (error) {

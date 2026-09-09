@@ -378,8 +378,11 @@ export const verifyPayment = async (customerIdInput: string | undefined, input: 
 
   if (ride.driver_id) {
     try {
-      const driver = await UserModel.findById(String(ride.driver_id)).select("fcm_token").lean();
-      const driverToken = driver?.fcm_token?.trim();
+      const driver = await UserModel.findById(String(ride.driver_id))
+        .select("fcm_token driver_fcm_token")
+        .lean();
+      const driverToken =
+        driver?.driver_fcm_token?.trim() || driver?.fcm_token?.trim();
       if (driverToken) {
         await sendPushNotification({
           token: driverToken,

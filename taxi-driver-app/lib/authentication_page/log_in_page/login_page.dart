@@ -5,7 +5,6 @@ import 'package:taxiapp/authentication_page/forgot_password/forgot_password.dart
 import 'package:taxiapp/authentication_page/rigester_page/register_page.dart';
 import 'package:taxiapp/core/app_colors.dart';
 import 'package:taxiapp/core/taxi_icons.dart';
-import 'package:taxiapp/customer/customer_login_page.dart';
 import 'package:taxiapp/widgets/taxi_loading.dart';
 
 class LoginPage extends StatefulWidget {
@@ -207,16 +206,6 @@ class _LoginPageState extends State<LoginPage> {
                                   child: const Text('Create account', style: TextStyle(color: AppColors.green)),
                                 ),
                               ],
-                            ),
-                            TextButton(
-                              onPressed: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (_) => const CustomerLoginPage()),
-                              ),
-                              child: const Text(
-                                'Book a ride as customer',
-                                style: TextStyle(color: AppColors.gold),
-                              ),
                             ),
                           ],
                         ),
