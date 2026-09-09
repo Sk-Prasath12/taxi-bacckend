@@ -35,10 +35,8 @@ class ApiService {
       );
 
       if (response.statusCode == 401) {
-        if (!await CustomerAuthManager.refreshAccessToken()) {
-          await CustomerAuthManager.logout();
-          SessionService.redirectToLogin();
-        }
+        // Try refresh once; keep session if refresh fails (do not force logout).
+        await CustomerAuthManager.refreshAccessToken();
         return null;
       }
 

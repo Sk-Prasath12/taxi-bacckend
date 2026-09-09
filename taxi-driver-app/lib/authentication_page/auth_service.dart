@@ -44,7 +44,8 @@ class AuthService extends ChangeNotifier {
   /// True after driver completes mandatory Go Online (persisted as was_on_duty).
   bool resumeOnline = false;
 
-  bool get isLoggedIn => token != null && token!.isNotEmpty && currentUser != null;
+  /// Local session present — email optional so cold-start still stays logged in.
+  bool get isLoggedIn => token != null && token!.isNotEmpty;
 
   bool get isAuthenticated => isLoggedIn;
 
@@ -229,21 +230,11 @@ class AuthService extends ChangeNotifier {
             if (refreshed) {
               final retryResponse =
                   await _apiClient.getResult('${ApiConstants.driverBase}/profile');
-              if (retryResponse.statusCode == 401 || retryResponse.statusCode == 403) {
-                if (isJwtExpired(token)) {
-                  await logout();
-                  return false;
-                }
-              } else if (retryResponse.data is Map<String, dynamic>) {
+              if (retryResponse.data is Map<String, dynamic>) {
                 await _applyProfileResponse(retryResponse.data as Map<String, dynamic>);
               }
-            } else if (isJwtExpired(token)) {
-              await logout();
-              return false;
+              // Never auto-logout — keeps driver session when customer app is also open.
             }
-          } else if (isJwtExpired(token)) {
-            await logout();
-            return false;
           }
         } else if (response.data is Map<String, dynamic>) {
           await _applyProfileResponse(response.data as Map<String, dynamic>);

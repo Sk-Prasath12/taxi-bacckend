@@ -8,9 +8,9 @@ import 'package:taxiapp/core/app_colors.dart';
 import 'package:taxiapp/services/driver_approval_watch_service.dart';
 import 'package:taxiapp/dashboard/dashboard_page.dart';
 
-/// Driver APK only — never routes to embedded customer UI.
-/// Customer rides use the separate customer app so both can stay logged in
-/// on the same device.
+/// Driver APK only — never opens embedded customer UI.
+/// Customer login lives in the separate customer app so both can stay
+/// logged in on the same phone at the same time.
 class AuthWrapper extends StatefulWidget {
   final AuthService authService;
 

@@ -48,19 +48,33 @@ class CustomerAuthManager {
       var refresh = session['refreshToken'] as String?;
       if (token == null || token.isEmpty) return false;
 
+      final role = parseJwtClaims(token)?.role?.toUpperCase();
+      if (role != null &&
+          role.isNotEmpty &&
+          role != 'CUSTOMER' &&
+          role != 'USER') {
+        // Wrong-role token for this APK — clear only THIS app's storage.
+        // Never affects the driver APK on the same device.
+        await logout();
+        return false;
+      }
+
       await CustomerSessionStore.deviceId();
 
       if (isJwtExpired(token)) {
-        if (refresh == null || refresh.isEmpty) {
-          await logout();
-          return false;
+        if (refresh != null && refresh.isNotEmpty) {
+          final refreshed = await refreshAccessToken(refreshToken: refresh);
+          if (refreshed) {
+            token = await CustomerSessionStore.getAccessToken() ?? token;
+          } else {
+            // Keep local session; user stays logged in offline until explicit logout.
+            await _restoreCachedSession(token: token, refresh: refresh);
+            return true;
+          }
+        } else {
+          await _restoreCachedSession(token: token, refresh: refresh);
+          return true;
         }
-        final refreshed = await refreshAccessToken(refreshToken: refresh);
-        if (!refreshed) {
-          await logout();
-          return false;
-        }
-        token = await CustomerSessionStore.getAccessToken() ?? token;
       }
 
       final fetch = await _fetchProfileDetailed(token);
@@ -71,36 +85,29 @@ class CustomerAuthManager {
         }
         await _applyProfile(fetch.profile!, token: token);
       } else if (fetch.unauthorized) {
-        if (!isJwtExpired(token)) {
-          // Access token still valid locally — keep session (e.g. transient network glitch).
-          await _restoreCachedSession(token: token, refresh: refresh);
-        } else if (refresh != null &&
+        if (refresh != null &&
             refresh.isNotEmpty &&
             await refreshAccessToken(refreshToken: refresh)) {
           final retryToken = await CustomerSessionStore.getAccessToken();
-          if (retryToken == null) {
-            await logout();
-            return false;
-          }
-          final retry = await _fetchProfileDetailed(retryToken);
-          if (retry.profile != null) {
-            if (retry.profile!['is_blocked'] == true) {
-              await logout();
-              return false;
+          if (retryToken != null) {
+            final retry = await _fetchProfileDetailed(retryToken);
+            if (retry.profile != null) {
+              if (retry.profile!['is_blocked'] == true) {
+                await logout();
+                return false;
+              }
+              await _applyProfile(retry.profile!, token: retryToken);
+            } else {
+              await _restoreCachedSession(token: retryToken, refresh: refresh);
             }
-            await _applyProfile(retry.profile!, token: retryToken);
-          } else if (retry.unauthorized) {
-            await logout();
-            return false;
           } else {
-            await _restoreCachedSession(token: retryToken, refresh: refresh);
+            await _restoreCachedSession(token: token, refresh: refresh);
           }
         } else {
-          await logout();
-          return false;
+          // Keep session — do not auto-logout when driver app is also in use.
+          await _restoreCachedSession(token: token, refresh: refresh);
         }
       } else {
-        // Offline or server error — keep saved session and use cached profile.
         await _restoreCachedSession(token: token, refresh: refresh);
       }
 

@@ -60,10 +60,8 @@ class RideService {
   }
 
   static Future<void> _handleUnauthorized() async {
-    final refreshed = await CustomerAuthManager.refreshAccessToken();
-    if (refreshed) return;
-    await CustomerAuthManager.logout();
-    SessionService.redirectToLogin();
+    // Refresh only — do not wipe session (driver app may also be open on device).
+    await CustomerAuthManager.refreshAccessToken();
   }
 
   /// Returns the customer's in-progress ride, or null if none.
@@ -78,8 +76,6 @@ class RideService {
         if (await CustomerAuthManager.refreshAccessToken()) {
           return getActiveRide();
         }
-        await CustomerAuthManager.logout();
-        SessionService.redirectToLogin();
         return null;
       }
       if (response.statusCode == 404) return null;
